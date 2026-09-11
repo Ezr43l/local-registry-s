@@ -1,0 +1,30 @@
+# Configuracion del registro, versionada aqui —y no heredada de la imagen de
+# terceros— para que cambiarla sea un commit y un despliegue, no una edicion a
+# mano en un nodo.
+version: 0.1
+log:
+  fields:
+    service: registry
+storage:
+  cache:
+    blobdescriptor: inmemory
+  filesystem:
+    rootdirectory: /var/lib/registry
+  # Sin esto, la API de borrado responde 405 y NO hay forma de recuperar espacio:
+  # ni borrando etiquetas ni recolectando basura. Viene desactivado de fabrica.
+  #
+  # Activarlo no borra nada por si solo: permite DELETE en la API OCI. El panel
+  # solo lo usa tras autenticar su mantenimiento, pero cualquier cliente que ya
+  # tenga acceso al Registry tambien puede invocar esa API. Por ello el puerto
+  # debe permanecer en una red de confianza o tras autenticacion externa.
+  delete:
+    enabled: true
+http:
+  addr: :5000
+  headers:
+    X-Content-Type-Options: [nosniff]
+health:
+  storagedriver:
+    enabled: true
+    interval: 10s
+    threshold: 3

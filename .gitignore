@@ -1,0 +1,11 @@
+# Secretos y accesos: NUNCA se suben.
+.secrets/
+ACCESO-LOCAL.md
+.env
+data/
+secrets/
+
+# Ruido
+*.log
+*.tmp
+.DS_Store

@@ -1,0 +1,5 @@
+# Los guiones de este repo se ejecutan en los Unraid (Linux) y se copian tal cual
+# al /boot de cada nodo. Si se clonaran en Windows con finales CRLF, bash moriría
+# allí con errores de «\r» imposibles de leer. Se fuerza LF siempre, se clone donde
+# se clone.
+* text=auto eol=lf

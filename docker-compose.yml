@@ -1,0 +1,29 @@
+services:
+  local-registry:
+    build:
+      context: .
+      dockerfile: docker/local-registry/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-v1.2.12}
+        SOURCE_URL: ${SOURCE_URL:-https://github.com/Ezr43l/local-registry-s}
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-unknown}
+        LICENSE: ${LICENSE_SPDX:-Apache-2.0}
+    image: ${REGISTRY_IMAGE:-local-registry:v1.2.12}
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${REGISTRY_BIND_ADDRESS:-0.0.0.0}:${REGISTRY_PORT:-5000}:5000"
+      - "${PANEL_BIND_ADDRESS:-0.0.0.0}:${PANEL_PORT:-5001}:5001"
+    volumes:
+      - "${REGISTRY_DATA_DIR:-./data/registry}:/var/lib/registry"
+    read_only: true
+    tmpfs:
+      - /run:rw,nosuid,noexec,size=16m,mode=0755
+      - /tmp:rw,nosuid,noexec,size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    stop_grace_period: 30s

@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+.secrets
+secrets
+data
+ACCESO-LOCAL.md
+*.log
+*.tmp
+__pycache__
+*.py[cod]

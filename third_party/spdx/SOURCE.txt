@@ -1,0 +1,7 @@
+SPDX license-list-data v3.28.0
+Repository: https://github.com/spdx/license-list-data
+Commit: c4a7237ec8f4654e867546f9f409749300f1bf4c
+
+Estos textos canónicos complementan los avisos exactos conservados desde cada
+módulo Go/npm. UPSTREAM-README.md describe el origen y proceso de publicación
+de estos datos generados.

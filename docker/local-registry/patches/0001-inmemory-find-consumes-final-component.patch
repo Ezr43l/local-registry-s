@@ -1,0 +1,89 @@
+diff --git a/registry/storage/driver/inmemory/driver_test.go b/registry/storage/driver/inmemory/driver_test.go
+index 54b6fe0f..2ebb03bd 100644
+--- a/registry/storage/driver/inmemory/driver_test.go
++++ b/registry/storage/driver/inmemory/driver_test.go
+@@ -1,6 +1,8 @@
+ package inmemory
+ 
+ import (
++	"context"
++	"errors"
+ 	"testing"
+ 
+ 	storagedriver "github.com/distribution/distribution/v3/registry/storage/driver"
+@@ -15,6 +17,53 @@ func TestInMemoryDriverSuite(t *testing.T) {
+ 	testsuites.Driver(t, newDriverConstructor, false)
+ }
+ 
++func TestDeleteDirectoryWithAdjacentEqualComponents(t *testing.T) {
++	driver := New()
++	ctx := context.Background()
++	path := "/repeat/repeat/blob"
++
++	if err := driver.PutContent(ctx, path, []byte("content")); err != nil {
++		t.Fatalf("put content: %v", err)
++	}
++	if err := driver.Delete(ctx, "/repeat/repeat"); err != nil {
++		t.Fatalf("delete directory with adjacent equal components: %v", err)
++	}
++	if _, err := driver.GetContent(ctx, path); err == nil {
++		t.Fatal("deleted subpath is still readable")
++	} else {
++		var notFound storagedriver.PathNotFoundError
++		if !errors.As(err, &notFound) {
++			t.Fatalf("get deleted content: got %T, want PathNotFoundError", err)
++		}
++	}
++}
++
++func TestDeleteOnlyDeletesExactSelfNestedSubpath(t *testing.T) {
++	driver := New()
++	ctx := context.Background()
++	deletedPath := "/prefix/prefix/blob"
++	retainedPath := "/prefix/prefixsuffix/blob"
++
++	for _, path := range []string{deletedPath, retainedPath} {
++		if err := driver.PutContent(ctx, path, []byte(path)); err != nil {
++			t.Fatalf("put content %q: %v", path, err)
++		}
++	}
++	if err := driver.Delete(ctx, "/prefix/prefix"); err != nil {
++		t.Fatalf("delete exact self-nested subpath: %v", err)
++	}
++	if _, err := driver.GetContent(ctx, deletedPath); err == nil {
++		t.Fatal("deleted self-nested subpath is still readable")
++	}
++	contents, err := driver.GetContent(ctx, retainedPath)
++	if err != nil {
++		t.Fatalf("get prefix sibling: %v", err)
++	}
++	if string(contents) != retainedPath {
++		t.Fatalf("get prefix sibling: got %q, want %q", contents, retainedPath)
++	}
++}
++
+ func BenchmarkInMemoryDriverSuite(b *testing.B) {
+ 	testsuites.BenchDriver(b, newDriverConstructor)
+ }
+diff --git a/registry/storage/driver/inmemory/mfs.go b/registry/storage/driver/inmemory/mfs.go
+index f52bddbf..681fb1ec 100644
+--- a/registry/storage/driver/inmemory/mfs.go
++++ b/registry/storage/driver/inmemory/mfs.go
+@@ -77,13 +77,12 @@ func (d *dir) find(q string) node {
+ 		return d
+ 	}
+ 
+-	if child.isdir() {
+-		// traverse down!
+-		q = q[i+1:]
+-		return child.(*dir).find(q)
++	if i < 0 || !child.isdir() {
++		return child
+ 	}
+ 
+-	return child
++	// traverse down only when at least one path component remains.
++	return child.(*dir).find(q[i+1:])
+ }
+ 
+ func (d *dir) list(p string) ([]string, error) {

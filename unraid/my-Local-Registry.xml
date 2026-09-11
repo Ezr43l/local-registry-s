@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!-- Un único contenedor: registro OCI y panel integrado. La plantilla sólo
+     define conexiones Docker; el asistente web guarda la configuración bajo
+     el mismo volumen persistente de almacenamiento. -->
+<Container version="2">
+  <Name>Local-Registry</Name>
+  <Repository>ghcr.io/ezr43l/local-registry-s:v1.2.12</Repository>
+  <Registry>https://github.com/Ezr43l/local-registry-s/pkgs/container/local-registry-s</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Ezr43l/local-registry-s/issues</Support>
+  <Project>https://github.com/Ezr43l/local-registry-s</Project>
+  <Overview>Registro OCI local con panel integrado, comparación entre nodos y mantenimiento coordinado. Tras el primer arranque, abre la WebUI para indicar nodos, retención y horario. Los secretos se generan dentro del volumen de almacenamiento y no se introducen en la plantilla.</Overview>
+  <Category>Tools:</Category>
+  <WebUI>http://[IP]:[PORT:5001]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Ezr43l/local-registry-s/main/unraid/my-Local-Registry.xml</TemplateURL>
+  <Icon>https://www.docker.com/wp-content/uploads/2022/03/Moby-logo.png</Icon>
+  <ExtraParams>--restart=unless-stopped --init --read-only --tmpfs /run:rw,nosuid,noexec,size=16m,mode=0755 --tmpfs /tmp:rw,nosuid,noexec,size=32m,mode=1777 --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=256</ExtraParams>
+  <Config Name="Puerto del registro" Target="5000" Default="5000" Mode="tcp" Description="Puerto para push y pull de imágenes." Type="Port" Display="always" Required="true" Mask="false">5000</Config>
+  <Config Name="Puerto del panel" Target="5001" Default="5001" Mode="tcp" Description="Puerto del panel y su API." Type="Port" Display="always" Required="true" Mask="false">5001</Config>
+  <Config Name="Almacenamiento" Target="/var/lib/registry" Default="/mnt/user/appdata/local-registry" Mode="rw" Description="Imágenes, configuración del panel, secretos generados y estado. Conserva este directorio al actualizar." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/local-registry</Config>
+</Container>
