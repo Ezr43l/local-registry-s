@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Ezr43l/local-registry-s/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Ezr43l/local-registry-s/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Versión v1.2.12" src="https://img.shields.io/badge/versión-v1.2.12-ff9f43">
+  <img alt="Versión v1.2.13" src="https://img.shields.io/badge/versión-v1.2.13-ff9f43">
   <img alt="Un contenedor" src="https://img.shields.io/badge/despliegue-1%20contenedor-55df9a">
   <img alt="Linux AMD64 y ARM64" src="https://img.shields.io/badge/Linux-amd64%20%7C%20arm64-12cddd">
   <a href="LICENSE"><img alt="Licencia Apache 2.0" src="https://img.shields.io/badge/licencia-Apache--2.0-7d91a3"></a>
@@ -14,7 +14,7 @@
 
 Local Registry es un registro Docker/OCI autohospedado con panel web integrado,
 comparación entre nodos y mantenimiento coordinado. La única versión publicada
-en este repositorio es `v1.2.12`.
+en este repositorio es `v1.2.13`.
 
 Se distribuye como una única imagen para contenedores Linux. La variante
 `linux/amd64` sirve para los servidores Unraid/x86-64 habituales y
@@ -36,7 +36,7 @@ La plantilla `unraid/my-Local-Registry.xml` sólo pide tres datos:
 2. puerto del panel, normalmente `5001`;
 3. directorio persistente, normalmente `/mnt/user/appdata/local-registry`.
 
-La plantilla descarga `ghcr.io/ezr43l/local-registry-s:v1.2.12`; no depende de un
+La plantilla descarga `ghcr.io/ezr43l/local-registry-s:v1.2.13`; no depende de un
 Registry que ya exista en la red local. Al terminar de crear el contenedor, abre
 la WebUI. El asistente solicita el nombre del nodo, la topología, la retención,
 el horario y la zona horaria. Esos datos quedan dentro del volumen persistente,

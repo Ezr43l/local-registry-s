@@ -357,7 +357,10 @@ export interface Snapshot {
 
 export async function fetchAll(refresh = false): Promise<Snapshot> {
   const res = await fetch(`api/all${refresh ? '?refresh=1' : ''}`, { credentials: 'same-origin' })
-  if (!res.ok) throw new Error(`El servicio respondió ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => null) as { error?: string; detail?: string } | null
+    throw new Error(body?.detail || body?.error || `El servicio respondió ${res.status}`)
+  }
   return res.json()
 }
 
@@ -384,7 +387,10 @@ export async function runMaintenance(
       'X-CSRF-Token': csrfToken,
     },
   })
-  if (!res.ok) throw new Error(`El servicio respondió ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => null) as { error?: string; detail?: string } | null
+    throw new Error(body?.detail || body?.error || `El servicio respondió ${res.status}`)
+  }
   return res.json()
 }
 

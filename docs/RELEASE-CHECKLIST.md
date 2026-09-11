@@ -18,8 +18,8 @@ la publicación de una versión estable siempre es una decisión manual.
 
 ## Versión actual
 
-- Versión: `v1.2.12`.
-- Imagen: `ghcr.io/ezr43l/local-registry-s:v1.2.12`.
+- Versión: `v1.2.13`.
+- Imagen: `ghcr.io/ezr43l/local-registry-s:v1.2.13`.
 - Alias estable: `ghcr.io/ezr43l/local-registry-s:stable`.
 - Plantilla Unraid: `unraid/my-Local-Registry.xml`.
 

@@ -91,19 +91,19 @@ ssh() {
       run_remote "$remote"
       ;;
     *"sed -n 's|.*<Repository>"*)
-      printf '%s\n' 'local-registry:v1.2.12'
+      printf '%s\n' 'local-registry:v1.2.13'
       ;;
     *'file="$dir/admin-token"'*|*'file="$dir/cluster-token"'*|\
     *"sha256sum '/remote/secrets/"*)
       run_remote "$remote"
       ;;
     *"docker inspect 'Local-Registry' --format '{{.State.Running}}"*)
-      printf '%s\n' 'true|local-registry:v1.2.12|unless-stopped|5000|5001'
+      printf '%s\n' 'true|local-registry:v1.2.13|unless-stopped|5000|5001'
       ;;
     *'envs="$(docker inspect'*)
       printf '%s\n' secure
       ;;
-    *"docker pull -q 'local-registry:v1.2.12'"*)
+    *"docker pull -q 'local-registry:v1.2.13'"*)
       return 0
       ;;
     *'stage="$dir/.admin-token.'*|*'stage="$dir/.cluster-token.'*|\

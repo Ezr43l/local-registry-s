@@ -306,7 +306,7 @@ REGISTRY_URL = _validated_http_base(
 )
 REGISTRY_DATA = Path(os.environ.get("REGISTRY_DATA", "/var/lib/registry"))
 NODE_NAME = _validated_node_name("NODE_NAME", os.environ.get("NODE_NAME", "local"))
-APP_VERSION = os.environ.get("APP_VERSION", "v1.2.12").strip() or "v1.2.12"
+APP_VERSION = os.environ.get("APP_VERSION", "v1.2.13").strip() or "v1.2.13"
 PORT = _env_int("PORT", 5001, 1, 65535)
 CACHE_TTL = _env_int("CACHE_TTL", 300, 0, 86400)
 WEB_ROOT = Path(os.environ.get("WEB_ROOT", "/app/web"))

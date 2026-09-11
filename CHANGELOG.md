@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.13
+
+- El mantenimiento manual conserva en pantalla el resultado de las tres fases al
+  finalizar, incluido el nodo y el motivo exacto si la operación queda bloqueada.
+- Los errores devueltos por la API se muestran con su explicación real en lugar de
+  reducirse al número de respuesta HTTP.
+- Se ha regularizado la activación del mantenimiento en los tres nodos del clúster y
+  se han validado una simulación y una ejecución real completas.
+
 ## v1.2.12
 
 - Actualizado el contrato reproducible de Alpine a `xz-libs 5.8.4-r0`, la revisión

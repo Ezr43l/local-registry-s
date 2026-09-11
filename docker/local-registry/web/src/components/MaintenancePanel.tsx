@@ -196,9 +196,12 @@ export function MaintenancePanel({
   }
 
   const progresoActivo = progresoVentana.running || st.cargando === 'window'
-  const pasoRetencion = pasoVisible(progresoVentana, 'retention', progresoActivo)
-  const pasoGc = pasoVisible(progresoVentana, 'gc', progresoActivo)
-  const pasoSync = pasoVisible(progresoVentana, 'sync', progresoActivo)
+  const mostrarProgreso = progresoActivo || (
+    st.resultadoTipo === 'window' && progresoVentana.status !== 'idle'
+  )
+  const pasoRetencion = pasoVisible(progresoVentana, 'retention', mostrarProgreso)
+  const pasoGc = pasoVisible(progresoVentana, 'gc', mostrarProgreso)
+  const pasoSync = pasoVisible(progresoVentana, 'sync', mostrarProgreso)
   const ultimo = maintenance.history.last_run
   const ultimaPrevisualizacion = maintenance.history.last_preview
 
@@ -275,7 +278,7 @@ export function MaintenancePanel({
         </div>
       </div>
 
-      {progresoActivo && <VentanaProgreso progreso={progresoVentana} />}
+      {mostrarProgreso && <VentanaProgreso progreso={progresoVentana} />}
 
       <div className="maintenance-phases" aria-label="Fases del mantenimiento">
         <FaseMantenimiento numero="1" titulo="Conservar versiones" paso={pasoRetencion}>
@@ -621,7 +624,11 @@ function resumir(r: GcResult | RetentionResult | SyncResult | WindowResult): str
   if (r.action === 'window') {
     const estado = r.ok === false ? 'MANTENIMIENTO TERMINADO CON INCIDENCIAS' :
       r.dry_run ? 'PREVISUALIZACIÓN' : 'MANTENIMIENTO COMPLETADO'
-    return `${estado}. Consulta el resumen visual de las tres fases.`
+    const incidencia = r.progress?.steps.find((paso) =>
+      paso.status === 'failed' || paso.status === 'blocked'
+    )
+    const motivo = incidencia?.detail || r.progress?.message
+    return `${estado}. ${motivo || 'Consulta el resumen visual de las tres fases.'}`
   }
 
   if (r.enabled === false) return r.reason || 'Retención apagada.'

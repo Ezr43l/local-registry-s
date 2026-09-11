@@ -183,7 +183,7 @@ class DistributionContractTests(unittest.TestCase):
             (ROOT / "docker/local-registry/web/package.json").read_text(encoding="utf-8")
         )
         template = ET.parse(ROOT / "unraid/my-Local-Registry.xml").getroot()
-        self.assertEqual(version, "v1.2.12")
+        self.assertEqual(version, "v1.2.13")
         self.assertEqual(package["version"], version.removeprefix("v"))
         self.assertEqual(
             template.findtext("Repository"),
@@ -288,6 +288,8 @@ class DistributionContractTests(unittest.TestCase):
         self.assertNotIn("DialogoCoordinador", maintenance_panel)
         self.assertIn("void cambiarCoordinador(coordinadorElegido)", maintenance_panel)
         self.assertIn("coordinator-error", maintenance_panel)
+        self.assertIn("mostrarProgreso", maintenance_panel)
+        self.assertIn("incidencia?.detail", maintenance_panel)
         self.assertIn("Crear cuenta y entrar", auth_panel)
         self.assertIn("Configuración", app)
         for unknown_css_variable in ("var(--line)", "var(--text)", "var(--surface)"):
@@ -384,7 +386,7 @@ class DistributionContractTests(unittest.TestCase):
         self.assertEqual(configs["5000"], "5500")
         self.assertEqual(
             ET.parse(ROOT / "unraid/my-Local-Registry.xml").getroot().findtext("Repository"),
-            "ghcr.io/ezr43l/local-registry-s:v1.2.12",
+            "ghcr.io/ezr43l/local-registry-s:v1.2.13",
         )
 
     def test_renderer_rejects_ambiguous_or_nonportable_inputs(self):
