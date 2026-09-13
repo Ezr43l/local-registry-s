@@ -91,19 +91,19 @@ ssh() {
       run_remote "$remote"
       ;;
     *"sed -n 's|.*<Repository>"*)
-      printf '%s\n' 'local-registry:v1.2.13'
+      printf '%s\n' 'local-registry:v1.2.14'
       ;;
     *'file="$dir/admin-token"'*|*'file="$dir/cluster-token"'*|\
     *"sha256sum '/remote/secrets/"*)
       run_remote "$remote"
       ;;
     *"docker inspect 'Local-Registry' --format '{{.State.Running}}"*)
-      printf '%s\n' 'true|local-registry:v1.2.13|unless-stopped|5000|5001'
+      printf '%s\n' 'true|local-registry:v1.2.14|unless-stopped|5000|5001'
       ;;
     *'envs="$(docker inspect'*)
       printf '%s\n' secure
       ;;
-    *"docker pull -q 'local-registry:v1.2.13'"*)
+    *"docker pull -q 'local-registry:v1.2.14'"*)
       return 0
       ;;
     *'stage="$dir/.admin-token.'*|*'stage="$dir/.cluster-token.'*|\
@@ -161,7 +161,7 @@ test -n "$(find /remote/secrets -maxdepth 1 -name ".rollback-*" -type d -print -
 test "$(stat -c "%u:%g:%a" /remote/secrets)" = "0:0:700"
 test "$(stat -c "%u:%g:%a" /remote/secrets/admin-token)" = "0:0:400"
 template=/remote/config/plugins/dockerMan/templates-user/my-Local-Registry.xml
-grep -Fq "<Repository>local-registry:v1.2.13</Repository>" "$template"
+grep -Fq "<Repository>local-registry:v1.2.14</Repository>" "$template"
 ! grep -Fq "<Repository>registry.example/legacy:v0</Repository>" "$template"
 test -n "$(find "$(dirname "$template")" -maxdepth 1 \
   -name "my-Local-Registry.xml.*.rollback" -type f -print -quit)"

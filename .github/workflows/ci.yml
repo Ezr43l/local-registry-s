@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test resumable release artifact gate
+        shell: bash
+        run: bash .github/scripts/test-release-artifact.sh
+
+      - name: Validate version and public contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d ' \r\n' < VERSION)"
+          package_version="${version#v}"
+          grep -F "APP_VERSION=$version" .env.example
+          grep -F "local-registry:$version" docker-compose.yml
+          grep -F "local-registry-s:stable" unraid/my-Local-Registry.xml
+          grep -F "\"version\": \"$package_version\"" docker/local-registry/web/package.json
+          grep -F "LICENSE_SPDX=Apache-2.0" .env.example
+          test -f LICENSE
+          test -f THIRD_PARTY_NOTICES.md
+          test -f third_party/spdx/GPL-2.0-only.txt
+          test -f third_party/spdx/MPL-2.0.txt
+          grep -Fx '.env' .dockerignore
+          grep -Fx 'secrets' .dockerignore
+          if grep -R -E '__[A-Z0-9_]+__' unraid; then
+            echo "La plantilla contiene marcadores sin resolver" >&2
+            exit 1
+          fi
+          if grep -R -E '10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.' \
+              unraid .env.example docker-compose.yml; then
+            echo "Hay direcciones RFC1918 incrustadas en artefactos de instalación" >&2
+            exit 1
+          fi
+
+      - name: Validate Compose, XML and renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.example config --quiet
+          python -c "import xml.etree.ElementTree as E; E.parse('unraid/my-Local-Registry.xml')"
+          test "$(grep -c '<Config ' unraid/my-Local-Registry.xml)" = 3
+          if grep -F 'Type="Variable"' unraid/my-Local-Registry.xml; then
+            echo "La plantilla vuelve a exponer configuración interna como variables" >&2
+            exit 1
+          fi
+          python render-unraid-template.py unraid/my-Local-Registry.xml \
+            --repository registry.example/local-registry:v1.2.0 \
+            --set NODE_NAME=node-z > /tmp/rendered.xml
+          python -c "import xml.etree.ElementTree as E; E.parse('/tmp/rendered.xml')"
+          for shell_file in \
+              build-local-registry.sh deploy-registry.sh mirror-registries.sh \
+              scripts/collect-alpine-copyleft-sources.sh scripts/sync-spdx-license-texts.sh \
+              scripts/verify-alpine-copyleft-archive.sh \
+              tests/test-cluster-integration.sh tests/test-deploy-dry-run.sh \
+              tests/test-deploy-rollback.sh tests/test-deploy-post-commit.sh \
+              tests/test-copyleft-archive-verifier.sh \
+              tests/test-install-scripts.sh \
+              tests/test-invalid-runtime-config.sh \
+              tests/test-reproducible-source-artifacts.sh \
+              tests/test-runtime-contract.sh \
+              tests/fixtures/fake-remote-command.sh; do
+            bash -n "$shell_file"
+          done
+          bash tests/test-deploy-dry-run.sh
+          bash tests/test-install-scripts.sh
+          python -m py_compile scripts/verify-tar-members.py
+          bash tests/test-copyleft-archive-verifier.sh
+          if grep -R -E 'Target="MAINTENANCE_(ADMIN|CLUSTER)_TOKEN"|MAINTENANCE_(ADMIN|CLUSTER)_TOKEN:' \
+              unraid docker-compose.yml .env.example; then
+            echo "Una superficie pública vuelve a exponer secretos directos" >&2
+            exit 1
+          fi
+
+      - name: Lint shell and GitHub Actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' shell_files < <(
+            find . -type f -name '*.sh' -not -path './.git/*' -print0 | sort -z
+          )
+          test "${#shell_files[@]}" -gt 0
+          docker run --rm --entrypoint shellcheck -v "$PWD:/repo:ro" -w /repo \
+            koalaman/shellcheck-alpine@sha256:9955be09ea7f0dbf7ae942ac1f2094355bb30d96fffba0ec09f5432207544002 \
+            "${shell_files[@]}"
+          docker run --rm -v "$PWD:/repo:ro" -w /repo \
+            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+
+      - name: Audit source and web dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check bandit==1.9.4
+          bandit docker/local-registry/server.py scripts/verify-tar-members.py \
+            render-unraid-template.py -q
+          npm --prefix docker/local-registry/web audit --omit=dev --audit-level=high
+
+      - name: Build image and run embedded tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d ' \r\n' < VERSION)"
+          docker build --pull --tag local-registry:ci \
+            --file docker/local-registry/Dockerfile \
+            --build-arg "APP_VERSION=$version" \
+            --build-arg "SOURCE_URL=https://github.com/Ezr43l/local-registry-s" .
+
+      - name: Check runtime and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d ' \r\n' < VERSION)"
+          test "$(docker image inspect local-registry:ci --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$version"
+          test "$(docker image inspect local-registry:ci --format '{{index .Config.Labels "org.opencontainers.image.source"}}')" = "https://github.com/Ezr43l/local-registry-s"
+          test "$(docker image inspect local-registry:ci --format '{{index .Config.Labels "org.opencontainers.image.licenses"}}')" = "Apache-2.0"
+          test "$(docker image inspect local-registry:ci --format '{{index .Config.Labels "io.ezr43l.distribution.patch.sha256"}}')" = "7231d9f29fc09d182a997c76dc7c8fc16729d644bec9d46a0164d897d32b080b"
+          docker run --rm --entrypoint test local-registry:ci -f /app/LICENSE
+          docker run --rm --entrypoint test local-registry:ci \
+            -f /usr/share/licenses/local-registry/THIRD_PARTY_NOTICES.md
+          docker run --rm --entrypoint test local-registry:ci \
+            -f /usr/share/licenses/local-registry/distribution/LICENSE
+          docker run --rm --entrypoint test local-registry:ci \
+            -s /usr/share/licenses/local-registry/go/BUILT-MODULES.txt
+          docker run --rm --entrypoint test local-registry:ci \
+            -f /usr/share/licenses/local-registry/npm/files/react/LICENSE
+          docker run --rm --entrypoint test local-registry:ci \
+            -s /usr/share/licenses/local-registry/alpine/APK-PACKAGES.tsv
+          docker run --rm --entrypoint test local-registry:ci \
+            -f /usr/share/licenses/local-registry/alpine/RUNTIME-PACKAGES.lock
+          bash tests/test-runtime-contract.sh local-registry:ci linux/amd64
+          test "$(docker image inspect local-registry:ci --format '{{index .Config.Labels "io.ezr43l.licenses.notices"}}')" = "/usr/share/licenses/local-registry/THIRD_PARTY_NOTICES.md"
+          bash tests/test-invalid-runtime-config.sh local-registry:ci linux/amd64
+          bash tests/test-deploy-rollback.sh local-registry:ci
+          bash tests/test-deploy-post-commit.sh local-registry:ci
+
+      - name: Reject all critical or high vulnerabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
+            image --skip-version-check --scanners vuln \
+            --severity CRITICAL,HIGH --exit-code 1 local-registry:ci
+
+      - name: Exercise push, persistence and clustered maintenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tests/test-cluster-integration.sh local-registry:ci
+
+      - name: Secret scan of the exportable tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            dir . --no-banner --redact --exit-code 1

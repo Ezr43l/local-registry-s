@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.14
+
+- Restaurado en el paquete compartido el proceso que comprueba y publica la imagen
+  pública para servidores Linux AMD64 y ARM64.
+- La plantilla pública utiliza el canal `stable`, que se mueve únicamente después de
+  publicar y verificar una nueva versión estable.
+- No cambia el funcionamiento del registro, del panel ni del mantenimiento coordinado.
+
 ## v1.2.13
 
 - El mantenimiento manual conserva en pantalla el resultado de las tres fases al

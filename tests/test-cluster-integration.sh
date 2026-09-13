@@ -6,7 +6,7 @@ set -euo pipefail
 # contenedor literalmente; la variable no tiene efecto fuera de MSYS.
 export MSYS_NO_PATHCONV=1
 
-IMAGE="${1:-local-registry:v1.2.13}"
+IMAGE="${1:-local-registry:v1.2.14}"
 PREFIX="registry-cluster-it-$$"
 NETWORK="$PREFIX"
 TOKEN="integration-test-token-00000000000000000000000000000000"

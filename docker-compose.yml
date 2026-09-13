@@ -4,12 +4,12 @@ services:
       context: .
       dockerfile: docker/local-registry/Dockerfile
       args:
-        APP_VERSION: ${APP_VERSION:-v1.2.13}
+        APP_VERSION: ${APP_VERSION:-v1.2.14}
         SOURCE_URL: ${SOURCE_URL:-https://github.com/Ezr43l/local-registry-s}
         BUILD_DATE: ${BUILD_DATE:-}
         VCS_REF: ${VCS_REF:-unknown}
         LICENSE: ${LICENSE_SPDX:-Apache-2.0}
-    image: ${REGISTRY_IMAGE:-local-registry:v1.2.13}
+    image: ${REGISTRY_IMAGE:-local-registry:v1.2.14}
     restart: unless-stopped
     init: true
     ports:

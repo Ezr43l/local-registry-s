@@ -86,6 +86,9 @@ class DistributionContractTests(unittest.TestCase):
         collector = (
             ROOT / "scripts/collect-alpine-copyleft-sources.sh"
         ).read_text(encoding="utf-8")
+        release = (ROOT / ".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
         notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
         for path in (
             ROOT / "third_party/spdx/GPL-2.0-only.txt",
@@ -152,6 +155,9 @@ class DistributionContractTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(required, tar_verifier)
+        self.assertIn("alpine-copyleft-sources.tar.gz", release)
+        self.assertIn("alpine-copyleft-sources-manifest.tsv", release)
+        self.assertIn(".assets | length == 6", release)
         self.assertIn("abuild fetch verify", notices)
         self.assertNotIn("oferta", notices.lower())
 
@@ -183,11 +189,11 @@ class DistributionContractTests(unittest.TestCase):
             (ROOT / "docker/local-registry/web/package.json").read_text(encoding="utf-8")
         )
         template = ET.parse(ROOT / "unraid/my-Local-Registry.xml").getroot()
-        self.assertEqual(version, "v1.2.13")
+        self.assertEqual(version, "v1.2.14")
         self.assertEqual(package["version"], version.removeprefix("v"))
         self.assertEqual(
             template.findtext("Repository"),
-            f"ghcr.io/ezr43l/local-registry-s:{version}",
+            "ghcr.io/ezr43l/local-registry-s:stable",
         )
         self.assertEqual(
             template.findtext("Registry"),
@@ -386,7 +392,7 @@ class DistributionContractTests(unittest.TestCase):
         self.assertEqual(configs["5000"], "5500")
         self.assertEqual(
             ET.parse(ROOT / "unraid/my-Local-Registry.xml").getroot().findtext("Repository"),
-            "ghcr.io/ezr43l/local-registry-s:v1.2.13",
+            "ghcr.io/ezr43l/local-registry-s:stable",
         )
 
     def test_renderer_rejects_ambiguous_or_nonportable_inputs(self):
