@@ -282,6 +282,8 @@ jobs:
         run: |
           set -euo pipefail
           manifest="$(docker buildx imagetools inspect "${IMAGE_NAME}@${DIGEST}")"
+          manifest_json="$(docker buildx imagetools inspect \
+            "${IMAGE_NAME}@${DIGEST}" --format '{{json .Manifest}}')"
           grep -F 'linux/amd64' <<<"$manifest"
           grep -F 'linux/arm64' <<<"$manifest"
           cache_dir="$RUNNER_TEMP/trivy-cache"
@@ -304,8 +306,16 @@ jobs:
             --file docker/license-collector.Dockerfile .
           for platform in linux/amd64 linux/arm64; do
             arch="${platform#*/}"
+            child_digest="$(jq -er --arg arch "$arch" \
+              '[.manifests[]? |
+                select(.platform.os == "linux" and
+                       .platform.architecture == $arch)] |
+               if length == 1 then .[0].digest
+               else error("manifiesto de arquitectura no unico") end' \
+              <<<"$manifest_json")"
+            [[ "$child_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
             container="$(docker create --platform "$platform" \
-              "${IMAGE_NAME}@${DIGEST}")"
+              "${IMAGE_NAME}@${child_digest}")"
             if ! docker cp "$container:/lib/apk/db/installed" \
                 "release-artifacts/alpine-installed-${arch}.db"; then
               docker rm "$container" >/dev/null

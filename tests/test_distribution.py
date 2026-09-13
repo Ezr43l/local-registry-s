@@ -158,6 +158,13 @@ class DistributionContractTests(unittest.TestCase):
         self.assertIn("alpine-copyleft-sources.tar.gz", release)
         self.assertIn("alpine-copyleft-sources-manifest.tsv", release)
         self.assertIn(".assets | length == 6", release)
+        self.assertIn("child_digest=", release)
+        self.assertIn('"${IMAGE_NAME}@${child_digest}"', release)
+        self.assertNotRegex(
+            release,
+            r'docker create --platform "\$platform"\s+'
+            r'"\$\{IMAGE_NAME\}@\$\{DIGEST\}"',
+        )
         self.assertIn("abuild fetch verify", notices)
         self.assertNotIn("oferta", notices.lower())
 
