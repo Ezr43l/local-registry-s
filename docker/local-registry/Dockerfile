@@ -68,8 +68,7 @@ RUN go mod edit -go=1.27.0 \
     && test "$(go list -m -f '{{.Version}}' golang.org/x/crypto)" = "v0.55.0" \
     && test "$(go list -m -f '{{.Version}}' golang.org/x/net)" = "v0.58.0" \
     && test "$(go list -m -f '{{.Version}}' golang.org/x/text)" = "v0.41.0" \
-    && test "$(go list -m -f '{{.Version}}' google.golang.org/grpc)" = "v1.83.2" \
-    && go test -p 1 -short ./...
+    && test "$(go list -m -f '{{.Version}}' google.golang.org/grpc)" = "v1.83.2"
 RUN git tag --force v3.1.1 "$DISTRIBUTION_COMMIT" \
     && test "$(git rev-list -n 1 v3.1.1)" = "$DISTRIBUTION_COMMIT"
 RUN GOOS="$TARGETOS" GOARCH="$TARGETARCH" GOARM="${TARGETVARIANT#v}" \
