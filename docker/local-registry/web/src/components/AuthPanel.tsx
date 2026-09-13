@@ -124,6 +124,7 @@ export function AuthPanel({
             {busy ? 'Comprobando…' : setupRequired ? 'Crear cuenta y entrar' : 'Entrar'}
           </button>
           <span className="login-version">{APP_VERSION}</span>
+          <a className="login-support" href="https://discord.gg/8MAT6ZGJTW" target="_blank" rel="noreferrer">Soporte en Discord · Unraides</a>
         </form>
       </section>
     </main>

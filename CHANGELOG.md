@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.2.15
+
+- Añadido en el acceso y en el pie del panel el enlace de soporte a la comunidad de
+  Discord de Unraides.
+- La plantilla continúa siguiendo exclusivamente el canal estable.
+
 ## v1.2.14
 
 - Restaurado en el paquete compartido el proceso que comprueba y publica la imagen

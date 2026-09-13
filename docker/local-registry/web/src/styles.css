@@ -1493,6 +1493,21 @@ button.peligro:hover:not(:disabled) {
   color: var(--tinta);
 }
 
+.pie-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.login-support {
+  color: var(--acento);
+  font: 10px/1.4 var(--mono);
+  text-align: center;
+}
+
+.login-support:hover { color: var(--tinta); }
+
 @media (max-width: 700px) {
   .wrap {
     padding: 22px 13px 36px;

@@ -200,7 +200,7 @@ class DistributionContractTests(unittest.TestCase):
             (ROOT / "docker/local-registry/web/package.json").read_text(encoding="utf-8")
         )
         template = ET.parse(ROOT / "unraid/my-Local-Registry.xml").getroot()
-        self.assertEqual(version, "v1.2.14")
+        self.assertEqual(version, "v1.2.15")
         self.assertEqual(package["version"], version.removeprefix("v"))
         self.assertEqual(
             template.findtext("Repository"),

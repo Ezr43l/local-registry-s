@@ -41,7 +41,7 @@ case "$command_name" in
       format="${2:-}"
       case "$format" in
         *'.State.Running}}') printf '%s\n' true ;;
-        *'.Config.Image}}') printf '%s\n' 'local-registry:v1.2.14' ;;
+        *'.Config.Image}}') printf '%s\n' 'local-registry:v1.2.15' ;;
         *'.HostConfig.RestartPolicy.Name}}') printf '%s\n' 'unless-stopped' ;;
         *'.HostConfig.ReadonlyRootfs}}|'*) printf '%s\n' 'true|false|256|true' ;;
         *'json .HostConfig.CapDrop'*) printf '%s\n' '["ALL"]' ;;
@@ -55,7 +55,7 @@ case "$command_name" in
           printf '%s\n' \
             'MAINTENANCE_ADMIN_TOKEN_FILE=/run/secrets/local-registry/admin-token' \
             'MAINTENANCE_CLUSTER_TOKEN_FILE=' \
-            'APP_VERSION=v1.2.14' \
+            'APP_VERSION=v1.2.15' \
             'NODE_NAME=node-a' \
             'PEERS=' \
             'PANEL_PEERS=' \

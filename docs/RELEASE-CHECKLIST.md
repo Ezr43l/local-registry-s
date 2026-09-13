@@ -17,8 +17,8 @@ La publicación comienza únicamente al crear deliberadamente el tag estable.
 
 ## Versión actual
 
-- Versión: `v1.2.14`.
-- Imagen: `ghcr.io/ezr43l/local-registry-s:v1.2.14`.
+- Versión: `v1.2.15`.
+- Imagen: `ghcr.io/ezr43l/local-registry-s:v1.2.15`.
 - Alias estable: `ghcr.io/ezr43l/local-registry-s:stable`.
 - Plantilla Unraid: `unraid/my-Local-Registry.xml`.
 

@@ -136,7 +136,10 @@ export default function App() {
           <span className="version version-footer">{APP_VERSION}</span>
           <span className="pie-note">· panel integrado del registro</span>
         </div>
-        <a href="api/all" target="_blank" rel="noreferrer">Ver API JSON</a>
+        <div className="pie-links">
+          <a href="api/all" target="_blank" rel="noreferrer">Ver API JSON</a>
+          <a href="https://discord.gg/8MAT6ZGJTW" target="_blank" rel="noreferrer">Soporte · Unraides</a>
+        </div>
       </footer>
     </main>
   )

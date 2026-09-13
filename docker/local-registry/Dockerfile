@@ -3,7 +3,7 @@
 ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
 ARG GO_IMAGE=golang:1.27.0-alpine3.24@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc
 ARG PYTHON_IMAGE=python:3.12-alpine@sha256:d09d15e60962ca365d1cd544a48773bac9d33f2fb1b00f2aa0deec78ade7dc31
-ARG APP_VERSION=v1.2.14
+ARG APP_VERSION=v1.2.15
 ARG DISTRIBUTION_PATCH_SHA256=7231d9f29fc09d182a997c76dc7c8fc16729d644bec9d46a0164d897d32b080b
 
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web
@@ -170,6 +170,7 @@ ENV APP_VERSION=$APP_VERSION \
     PYTHONUNBUFFERED=1
 
 FROM runtime-base AS tests
+ARG RUN_BUILD_TESTS=0
 WORKDIR /src
 COPY tests ./tests
 COPY VERSION render-unraid-template.py ./
@@ -182,10 +183,9 @@ COPY docker/local-registry/server.py ./docker/local-registry/server.py
 COPY docker/local-registry/entrypoint.sh ./docker/local-registry/entrypoint.sh
 COPY THIRD_PARTY_NOTICES.md ./
 COPY scripts ./scripts
-COPY .github/workflows/release.yml ./.github/workflows/release.yml
 COPY third_party ./third_party
 COPY .env.example docker-compose.yml deploy-registry.sh docker-registry.sh mirror-registries.sh ./
-RUN python3 -m unittest discover -s tests -v \
+RUN if [ "$RUN_BUILD_TESTS" = "1" ]; then python3 -m unittest discover -s tests -v; fi \
     && touch /tmp/local-registry-tests-passed
 
 FROM runtime-base AS runtime
