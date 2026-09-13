@@ -91,8 +91,12 @@ done
 }
 
 GIT_DIR="$WORK_ROOT/aports.git"
+APORTS_REMOTES=(
+  "https://gitlab.alpinelinux.org/alpine/aports.git"
+  "https://github.com/alpinelinux/aports.git"
+)
 git -c init.defaultBranch=main init --bare "$GIT_DIR" >/dev/null
-git -C "$GIT_DIR" remote add origin https://gitlab.alpinelinux.org/alpine/aports.git
+git -C "$GIT_DIR" remote add origin "${APORTS_REMOTES[0]}"
 git -C "$GIT_DIR" config remote.origin.promisor true
 git -C "$GIT_DIR" config remote.origin.partialclonefilter blob:none
 git -C "$GIT_DIR" config fetch.fsckObjects true
@@ -108,20 +112,26 @@ for commit in "${aports_commits[@]}"; do
   }
 done
 fetch_complete=0
-for attempt in 1 2 3; do
-  if git -C "$GIT_DIR" fetch --quiet --no-tags --filter=blob:none --depth=1 \
-      origin "${aports_commits[@]}"; then
-    fetch_complete=1
-    break
-  fi
-  rm -f -- "$GIT_DIR/shallow.lock"
-  if [[ $attempt -lt 3 ]]; then
-    printf 'Descarga de aports interrumpida; reintento %s de 3.\n' "$((attempt + 1))" >&2
-    sleep "$attempt"
-  fi
+for aports_remote in "${APORTS_REMOTES[@]}"; do
+  git -C "$GIT_DIR" remote set-url origin "$aports_remote"
+  for attempt in 1 2 3; do
+    if git -C "$GIT_DIR" fetch --quiet --no-tags --filter=blob:none --depth=1 \
+        origin "${aports_commits[@]}"; then
+      fetch_complete=1
+      break 2
+    fi
+    rm -f -- "$GIT_DIR/shallow.lock"
+    if [[ $attempt -lt 3 ]]; then
+      printf 'Descarga de aports desde %s interrumpida; reintento %s de 3.\n' \
+        "$aports_remote" "$((attempt + 1))" >&2
+      sleep "$attempt"
+    fi
+  done
+  printf 'Fuente de aports no disponible: %s; se probará la siguiente fuente oficial.\n' \
+    "$aports_remote" >&2
 done
 [[ $fetch_complete -eq 1 ]] || {
-  echo "No se pudieron obtener los commits exactos de aports tras 3 intentos" >&2
+  echo "No se pudieron obtener los commits exactos de ninguna fuente oficial de aports" >&2
   exit 1
 }
 
