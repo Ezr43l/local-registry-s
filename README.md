@@ -3,7 +3,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ezr43l/local-registry-s/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Ezr43l/local-registry-s/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Versión v1.2.15" src="https://img.shields.io/badge/versión-v1.2.15-ff9f43">
   <img alt="Un contenedor" src="https://img.shields.io/badge/despliegue-1%20contenedor-55df9a">
   <img alt="Linux AMD64 y ARM64" src="https://img.shields.io/badge/Linux-amd64%20%7C%20arm64-12cddd">
@@ -13,8 +12,8 @@
 <p align="center"><strong>Tu registro OCI, cerca de los nodos y bajo tu control.</strong></p>
 
 Local Registry es un registro Docker/OCI autohospedado con panel web integrado,
-comparación entre nodos y mantenimiento coordinado. La única versión publicada
-en este repositorio es `v1.2.15`.
+comparación entre nodos y mantenimiento coordinado. La versión estable actual
+de este repositorio es `v1.2.15`.
 
 Se distribuye como una única imagen para contenedores Linux. La variante
 `linux/amd64` sirve para los servidores Unraid/x86-64 habituales y
@@ -177,9 +176,19 @@ Python antes de producir la imagen. Distribution `3.1.1` se compila desde su
 commit fijado con las actualizaciones y el parche descritos en
 `docs/DISTRIBUTION-PATCH.md`.
 
-La imagen pública se construye automáticamente después de superar todas las
-comprobaciones. Cada versión queda disponible con su etiqueta exacta y el alias
-`stable` se actualiza sólo tras verificar la publicación.
+Las imágenes se construyen en nuestros equipos y se suben terminadas a GHCR.
+GitHub recibe el código y los archivos preparados; no ejecuta construcciones
+ni pruebas. Cada versión conserva su etiqueta exacta y el alias `stable`
+se actualiza al publicar la versión estable aprobada.
+
+## Soporte
+
+El soporte se presta exclusivamente en la comunidad de Discord de Unraides:
+
+**[Entrar en Unraides](https://discord.gg/8MAT6ZGJTW)**
+
+No se atienden solicitudes de soporte en GitHub. Al pedir ayuda, indica la
+versión de la aplicación y el error, sin compartir contraseñas ni tokens.
 
 ## Licencia
 

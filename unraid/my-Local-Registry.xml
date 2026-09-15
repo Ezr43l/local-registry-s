@@ -10,7 +10,7 @@
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/Ezr43l/local-registry-s/issues</Support>
+  <Support>https://discord.gg/8MAT6ZGJTW</Support>
   <Project>https://github.com/Ezr43l/local-registry-s</Project>
   <Overview>Registro OCI local con panel integrado, comparación entre nodos y mantenimiento coordinado. Tras el primer arranque, abre la WebUI para indicar nodos, retención y horario. Los secretos se generan dentro del volumen de almacenamiento y no se introducen en la plantilla.</Overview>
   <Category>Tools:</Category>
