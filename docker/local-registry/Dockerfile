@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
-ARG GO_IMAGE=golang:1.27.0-alpine3.24@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc
-ARG PYTHON_IMAGE=python:3.12-alpine@sha256:d09d15e60962ca365d1cd544a48773bac9d33f2fb1b00f2aa0deec78ade7dc31
-ARG APP_VERSION=v1.2.15
+ARG NODE_IMAGE=node:22.23.4-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
+ARG GO_IMAGE=golang:1.27.3-alpine3.24@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c
+ARG PYTHON_IMAGE=python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d
+ARG APP_VERSION=v1.2.16
 ARG DISTRIBUTION_PATCH_SHA256=7231d9f29fc09d182a997c76dc7c8fc16729d644bec9d46a0164d897d32b080b
 
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web
@@ -11,7 +11,9 @@ WORKDIR /web
 ARG APP_VERSION
 ENV VITE_APP_VERSION=$APP_VERSION
 COPY docker/local-registry/web/package.json docker/local-registry/web/package-lock.json ./
-RUN npm ci --ignore-scripts --no-audit --no-fund
+RUN npm install --global npm@12.2.1 --no-audit --no-fund \
+    && test "$(npm --version)" = "12.2.1" \
+    && npm ci --ignore-scripts --no-audit --no-fund
 COPY docker/local-registry/web/ ./
 RUN npm run build
 RUN set -eu; \
@@ -34,8 +36,8 @@ FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS registry-builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
-ARG DISTRIBUTION_COMMIT=9a8d98b679740cd514aa7e7d84d23d442a5ef54c
-ARG DISTRIBUTION_VERSION=3.1.1-secure.2
+ARG DISTRIBUTION_COMMIT=3220848f15d9279c66a41aa0a257469e6aede1e9
+ARG DISTRIBUTION_VERSION=3.1.2-secure.1
 ARG DISTRIBUTION_PATCH_SHA256
 ENV CGO_ENABLED=0 \
     GOTOOLCHAIN=local
@@ -58,19 +60,26 @@ RUN apk add --no-cache ca-certificates git \
     && git -C /src diff --check \
     && rm -rf /src/vendor
 WORKDIR /src
-RUN go mod edit -go=1.27.0 \
+RUN go mod edit -go=1.27.3 \
     && go get \
-      golang.org/x/crypto@v0.55.0 \
-      golang.org/x/net@v0.58.0 \
-      golang.org/x/text@v0.41.0 \
-      google.golang.org/grpc@v1.83.2 \
+      github.com/klauspost/compress@v1.18.7 \
+      golang.org/x/crypto@v0.58.0 \
+      golang.org/x/net@v0.61.0 \
+      golang.org/x/text@v0.43.0 \
+      google.golang.org/grpc@v1.84.0 \
+      go.opentelemetry.io/otel/exporters/otlp/otlptrace@v1.45.0 \
+      go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@v1.45.0 \
+      go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@v1.45.0 \
     && go mod tidy \
-    && test "$(go list -m -f '{{.Version}}' golang.org/x/crypto)" = "v0.55.0" \
-    && test "$(go list -m -f '{{.Version}}' golang.org/x/net)" = "v0.58.0" \
-    && test "$(go list -m -f '{{.Version}}' golang.org/x/text)" = "v0.41.0" \
-    && test "$(go list -m -f '{{.Version}}' google.golang.org/grpc)" = "v1.83.2"
-RUN git tag --force v3.1.1 "$DISTRIBUTION_COMMIT" \
-    && test "$(git rev-list -n 1 v3.1.1)" = "$DISTRIBUTION_COMMIT"
+    && ! go list -deps ./cmd/registry | grep -Eq '^golang.org/x/crypto/openpgp(/|$)' \
+    && test "$(go list -m -f '{{.Version}}' github.com/klauspost/compress)" = "v1.18.7" \
+    && test "$(go list -m -f '{{.Version}}' golang.org/x/crypto)" = "v0.58.0" \
+    && test "$(go list -m -f '{{.Version}}' golang.org/x/net)" = "v0.61.0" \
+    && test "$(go list -m -f '{{.Version}}' golang.org/x/text)" = "v0.43.0" \
+    && test "$(go list -m -f '{{.Version}}' google.golang.org/grpc)" = "v1.84.0" \
+    && test "$(go list -m -f '{{.Version}}' go.opentelemetry.io/otel/exporters/otlp/otlptrace)" = "v1.45.0"
+RUN git tag --force v3.1.2 "$DISTRIBUTION_COMMIT" \
+    && test "$(git rev-list -n 1 v3.1.2)" = "$DISTRIBUTION_COMMIT"
 RUN GOOS="$TARGETOS" GOARCH="$TARGETARCH" GOARM="${TARGETVARIANT#v}" \
     go build -trimpath \
       -ldflags="-s -w -X github.com/distribution/distribution/v3/version.version=$DISTRIBUTION_VERSION -X github.com/distribution/distribution/v3/version.revision=$DISTRIBUTION_COMMIT -X github.com/distribution/distribution/v3/version.mainpkg=github.com/distribution/distribution/v3" \
@@ -99,8 +108,8 @@ ARG BUILD_DATE=""
 ARG VCS_REF="unknown"
 ARG SOURCE_URL="https://github.com/Ezr43l/local-registry-s"
 ARG LICENSE="Apache-2.0"
-ARG DISTRIBUTION_COMMIT=9a8d98b679740cd514aa7e7d84d23d442a5ef54c
-ARG DISTRIBUTION_VERSION=3.1.1-secure.2
+ARG DISTRIBUTION_COMMIT=3220848f15d9279c66a41aa0a257469e6aede1e9
+ARG DISTRIBUTION_VERSION=3.1.2-secure.1
 ARG DISTRIBUTION_PATCH_SHA256
 
 LABEL org.opencontainers.image.title="Local Registry" \
@@ -113,7 +122,7 @@ LABEL org.opencontainers.image.title="Local Registry" \
       net.unraid.docker.managed="dockerman" \
       net.unraid.docker.webui="http://[IP]:[PORT:5001]/" \
       net.unraid.docker.icon="https://www.docker.com/wp-content/uploads/2022/03/Moby-logo.png" \
-      io.ezr43l.distribution.upstream.version="3.1.1" \
+      io.ezr43l.distribution.upstream.version="3.1.2" \
       io.ezr43l.distribution.upstream.revision="$DISTRIBUTION_COMMIT" \
       io.ezr43l.distribution.security-rebuild="$DISTRIBUTION_VERSION" \
       io.ezr43l.distribution.patch.sha256="$DISTRIBUTION_PATCH_SHA256" \
@@ -130,6 +139,7 @@ COPY --from=web /out/licenses/npm /usr/share/licenses/local-registry/npm
 
 RUN apk upgrade --no-cache \
     && apk add --no-cache ca-certificates tzdata \
+    && python3 -m pip uninstall --yes pip \
     && apk info -v | sed '/^\./d' | sort > /tmp/runtime-packages.actual \
     && cmp /usr/share/licenses/local-registry/alpine/RUNTIME-PACKAGES.lock \
         /tmp/runtime-packages.actual \

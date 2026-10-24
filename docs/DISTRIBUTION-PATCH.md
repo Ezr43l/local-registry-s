@@ -1,7 +1,7 @@
-# Parche de Docker Distribution 3.1.1
+# Parche de Docker Distribution 3.1.2
 
-La imagen parte del tag oficial `v3.1.1`, commit
-`9a8d98b679740cd514aa7e7d84d23d442a5ef54c`, y aplica antes de compilar el
+La imagen parte del tag oficial `v3.1.2`, commit
+`3220848f15d9279c66a41aa0a257469e6aede1e9`, y aplica antes de compilar el
 parche versionado
 `docker/local-registry/patches/0001-inmemory-find-consumes-final-component.patch`.
 Su SHA-256 fijado en el Dockerfile es
@@ -29,10 +29,8 @@ El parche detiene la recursión al consumir el último componente y añade dos
 regresiones explícitas para componentes adyacentes iguales y para el contraste
 `/prefix/prefix` frente a `/prefix/prefixsuffix`. No omite pruebas ni incorpora
 reintentos. El build verifica el checksum, exige que el parche sólo modifique
-`mfs.go` y `driver_test.go`, ejecuta `git diff --check` y mantiene una única
-ejecución serial de `go test -p 1 -short ./...` antes de compilar. La
-serialización evita falsos negativos en pruebas temporizadas del upstream
-cuando BuildKit comparte CPU, sin omitir paquetes ni pruebas.
+`mfs.go` y `driver_test.go`, ejecuta `git diff --check` y comprueba que el
+binario no importe el paquete OpenPGP obsoleto señalado por Go.
 
-El binario resultante se identifica como `3.1.1-secure.2` y la imagen incluye el
+El binario resultante se identifica como `3.1.2-secure.1` y la imagen incluye el
 checksum en `io.ezr43l.distribution.patch.sha256`.

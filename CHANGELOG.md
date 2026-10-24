@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.16
+
+- Actualizadas las bases de Python, Node.js y Go con las correcciones de seguridad
+  publicadas hasta el 24 de octubre de 2026.
+- Actualizado Distribution a 3.1.2 y renovadas sus bibliotecas vulnerables sin retirar
+  el parche propio del almacenamiento en memoria.
+- La construcción impide incorporar el paquete OpenPGP obsoleto señalado por Go.
+- Actualizados Vite y `source-map-js`; el instalador de paquetes de Python ya no forma
+  parte de la imagen final.
+
 ## v1.2.15
 
 - Añadido en el acceso y en el pie del panel el enlace de soporte a la comunidad de

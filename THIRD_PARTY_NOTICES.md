@@ -9,8 +9,8 @@ La imagen conserva el inventario y los textos aplicables bajo
 ## Distribution
 
 El binario `/bin/registry` se compila desde
-`distribution/distribution` 3.1.1, commit
-`9a8d98b679740cd514aa7e7d84d23d442a5ef54c`, bajo Apache-2.0. Esta distribución
+`distribution/distribution` 3.1.2, commit
+`3220848f15d9279c66a41aa0a257469e6aede1e9`, bajo Apache-2.0. Esta distribución
 lo modifica con el parche versionado
 `docker/local-registry/patches/0001-inmemory-find-consumes-final-component.patch`
 (SHA-256 `7231d9f29fc09d182a997c76dc7c8fc16729d644bec9d46a0164d897d32b080b`).

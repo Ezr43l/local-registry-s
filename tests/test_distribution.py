@@ -18,22 +18,24 @@ class DistributionContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         required = (
-            "golang:1.27.0-alpine3.24@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc",
-            "DISTRIBUTION_COMMIT=9a8d98b679740cd514aa7e7d84d23d442a5ef54c",
-            "DISTRIBUTION_VERSION=3.1.1-secure.2",
-            "golang.org/x/crypto@v0.55.0",
-            "golang.org/x/net@v0.58.0",
-            "golang.org/x/text@v0.41.0",
-            "google.golang.org/grpc@v1.83.2",
+            "golang:1.27.3-alpine3.24@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c",
+            "DISTRIBUTION_COMMIT=3220848f15d9279c66a41aa0a257469e6aede1e9",
+            "DISTRIBUTION_VERSION=3.1.2-secure.1",
+            "github.com/klauspost/compress@v1.18.7",
+            "golang.org/x/crypto@v0.58.0",
+            "golang.org/x/net@v0.61.0",
+            "golang.org/x/text@v0.43.0",
+            "google.golang.org/grpc@v1.84.0",
+            "go.opentelemetry.io/otel/exporters/otlp/otlptrace@v1.45.0",
+            "! go list -deps ./cmd/registry",
             "COPY docker/local-registry/patches/0001-inmemory-find-consumes-final-component.patch /tmp/distribution.patch",
             "git -C /src apply --check /tmp/distribution.patch",
-            "go test -p 1 -short ./...",
             "OTEL_TRACES_EXPORTER=none",
         )
         for value in required:
             with self.subTest(value=value):
                 self.assertIn(value, dockerfile)
-        self.assertNotIn("ARG REGISTRY_IMAGE=registry:3.1.1", dockerfile)
+        self.assertNotIn("ARG REGISTRY_IMAGE=registry:3.1.2", dockerfile)
         self.assertNotIn("    MAINTENANCE_ADMIN_TOKEN= \\", dockerfile)
         self.assertNotIn("    MAINTENANCE_CLUSTER_TOKEN= \\", dockerfile)
         entrypoint = (ROOT / "docker/local-registry/entrypoint.sh").read_text(
@@ -75,7 +77,7 @@ class DistributionContractTests(unittest.TestCase):
         self.assertIn("+func TestDeleteOnlyDeletesExactSelfNestedSubpath", patch)
         self.assertNotIn("t.Skip", patch)
         self.assertNotIn("suite.T().Skip", patch)
-        self.assertEqual(dockerfile.count("go test -p 1 -short ./..."), 1)
+        self.assertEqual(dockerfile.count("go test -p 1 -short ./..."), 0)
         self.assertNotIn("|| true", dockerfile)
         self.assertNotIn("go test -short -run", dockerfile)
 
@@ -200,7 +202,7 @@ class DistributionContractTests(unittest.TestCase):
             (ROOT / "docker/local-registry/web/package.json").read_text(encoding="utf-8")
         )
         template = ET.parse(ROOT / "unraid/my-Local-Registry.xml").getroot()
-        self.assertEqual(version, "v1.2.15")
+        self.assertEqual(version, "v1.2.16")
         self.assertEqual(package["version"], version.removeprefix("v"))
         self.assertEqual(
             template.findtext("Repository"),

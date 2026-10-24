@@ -5,10 +5,10 @@ proceso de publicación automática y sus requisitos de tareas en GitHub.
 
 ## Versión actual
 
-- Versión: `v1.2.15`.
+- Versión: `v1.2.16`.
 - Desarrollo privado: `Ezr43l/local-registry`.
 - Distribución pública: `Ezr43l/local-registry-s`.
-- Imagen por versión: `ghcr.io/ezr43l/local-registry-s:v1.2.15`.
+- Imagen por versión: `ghcr.io/ezr43l/local-registry-s:v1.2.16`.
 - Canal de la plantilla: `ghcr.io/ezr43l/local-registry-s:stable`.
 
 ## Pasos para una modificación
