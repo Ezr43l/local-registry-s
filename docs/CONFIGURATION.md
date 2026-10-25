@@ -17,6 +17,13 @@ interior:
 
 ## Valores gestionados desde la aplicación
 
+La sección de seguridad añade redes autorizadas, nombres/IP del certificado y
+credenciales por aplicación con permisos de descarga, publicación y borrado.
+El registro y los pares usan HTTPS con certificados verificados. Consulta la
+[guía de acceso seguro y migración](SECURE-REGISTRY.md) antes de actualizar una
+instalación que utilizaba HTTP. Los secretos permanecen en el volumen y no se
+introducen en la plantilla.
+
 El asistente inicial y la sección **Configuración** usan el mismo contrato. Los
 cambios se guardan en el volumen persistente y reinician únicamente el panel
 integrado para cargar los nuevos valores; el contenedor y el Registry no se

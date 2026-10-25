@@ -97,7 +97,7 @@ export default function App() {
             {cargando ? 'midiendo…' : 'Actualizar'}
           </button>
           <button onClick={() => setView('settings')}>Configuración</button>
-          <button onClick={() => void logout().then(() => {
+          <button onClick={() => void logout(auth.session?.csrf_token || '').then(() => {
             setDatos(null)
             setSetup(null)
             setView('dashboard')

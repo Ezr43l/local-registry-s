@@ -15,8 +15,8 @@
 # debe saber qué aplicaciones existen ni cómo se llaman sus etiquetas. Cada
 # proyecto llama a esto con las suyas.
 #
-# Requisito previo: cada nodo debe declarar los registros configurados como inseguros,
-# cosa que hace docker-registry.sh en cada arranque (ver README.md).
+# Requisito previo: cada cliente Docker debe tener el certificado del grupo y
+# una credencial de publicación, preparados con configure-docker-client.py.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -130,9 +130,7 @@ done
 # al día justo cuando acaba de quedarse viejo.
 ACCEPT='application/vnd.docker.distribution.manifest.v2+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.oci.image.index.v1+json'
 digest_of() {  # <ip> <repo> <tag>
-  curl -sI --max-time 8 -H "Accept: $ACCEPT" \
-    "http://$1:$REGISTRY_PORT/v2/$2/manifests/$3" 2>/dev/null \
-    | tr -d '\r' | awk -F': ' 'tolower($1)=="docker-content-digest"{print $2}'
+  "${SSH[@]}" "root@$1" "docker exec Local-Registry python3 /app/security.py digest '$2' '$3'" 2>/dev/null
 }
 
 fallos=0
@@ -195,7 +193,7 @@ echo
 echo "Catálogos resultantes:"
 for entry in "${NODES[@]}"; do
   node="${entry%%=*}"; ip="${entry#*=}"
-  printf '  %-16s %s\n' "$node" "$(curl -s --max-time 6 "http://$ip:$REGISTRY_PORT/v2/_catalog" || echo 'sin respuesta')"
+  printf '  %-16s %s\n' "$node" "$("${SSH[@]}" "root@$ip" 'docker exec Local-Registry python3 /app/security.py catalog' || echo 'sin respuesta')"
 done
 
 exit $fallos

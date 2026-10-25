@@ -16,9 +16,20 @@ el hallazgo al propietario por un medio privado antes de compartir detalles.
 
 ## Límites del producto
 
-- El Registry OCI sirve HTTP sin autenticación por defecto y debe permanecer en
-  una red de confianza o detrás de TLS y autenticación. Su API `DELETE` está
-  habilitada para la retención y no queda protegida por el token del panel.
+- El acceso público OCI y el panel exigen HTTPS. El motor OCI interno sólo
+  escucha en loopback dentro del contenedor. Las credenciales de aplicaciones
+  diferencian descarga, publicación y borrado, con límites por repositorio.
+- El login del panel es independiente de las credenciales de imágenes. La
+  primera cuenta exige un código local de un solo uso. Las sesiones se revocan
+  al cerrar sesión y las cookies sólo se envían mediante HTTPS.
+- Los nodos verifican certificados y firmas de peticiones y respuestas. La
+  réplica valida los manifiestos por su contenido, fija el digest de origen y
+  comprueba el resultado antes de dar la copia por terminada.
+- Los límites de conexiones, lectura, cuerpos e intentos de acceso protegen el
+  trabajo del panel y de la puerta OCI. Los eventos no registran secretos.
+- El código de incorporación incluye la identidad privada del grupo; concede
+  confianza administrativa al nodo incorporado. No publicarlo ni incluirlo en
+  plantillas. Un nodo comprometido requiere renovar la identidad del grupo.
 - El panel y su API exigen la cuenta propietaria creada en la primera visita.
   Las mutaciones validan además un token CSRF vinculado a la sesión.
 - El token de clúster debe tener entre 32 y 256 caracteres y no se usa para el

@@ -19,7 +19,8 @@ Raspberry Pi con sistema operativo de 64 bits.
 
 ## Funciones principales
 
-- Registro compatible con las operaciones habituales de Docker y OCI.
+- Registro HTTPS compatible con las operaciones habituales de Docker y OCI.
+- Credenciales por aplicación y permisos separados para descargar, publicar y borrar.
 - Panel web con usuarios, sesión y configuración persistente.
 - Retención configurable y etiquetas protegidas.
 - Limpieza segura de blobs sin uso.
@@ -50,8 +51,17 @@ sudo docker run -d \
   ghcr.io/ezr43l/local-registry-s:stable
 ```
 
-Abre `http://SERVIDOR:5001` para crear la primera cuenta y completar el asistente.
-El registro estará disponible en `http://SERVIDOR:5000`.
+Abre `https://SERVIDOR:5001`. La aplicación genera su propia identidad de certificados;
+comprueba su huella e instala su certificado público en los clientes de confianza.
+Para crear la primera cuenta, obtén el código inicial desde la consola del contenedor:
+
+```bash
+sudo docker exec local-registry cat /var/lib/registry/.local-registry/security/bootstrap-code
+```
+
+El registro estará disponible en `https://SERVIDOR:5000` y exigirá credenciales propias
+de aplicación, creadas desde Configuración. El usuario del panel no autoriza por sí solo
+las descargas o publicaciones de imágenes.
 
 También puedes utilizar [Docker Compose](docker-compose.yml) o la
 [plantilla para Unraid](unraid/my-Local-Registry.xml). Ajusta las rutas y los puertos al
@@ -72,6 +82,11 @@ nodo de un grupo genera un código de incorporación que permite añadir los dem
 copiar secretos manualmente.
 
 Toda la configuración puede revisarse después desde el panel.
+
+La sección de seguridad permite definir las direcciones del certificado, las redes
+autorizadas y las credenciales de cada cliente. Para una migración desde HTTP,
+prepara los certificados y las credenciales de todos los clientes antes del corte:
+[guía de acceso seguro](docs/SECURE-REGISTRY.md).
 
 ## Datos y copias de seguridad
 
@@ -95,9 +110,11 @@ Si falta un nodo necesario, la operación se detiene sin borrar datos.
 
 ## Seguridad
 
-No publiques el registro directamente en Internet. Para acceso remoto utiliza TLS,
-autenticación y una red controlada. Protege el volumen persistente: contiene imágenes,
-configuración y credenciales internas.
+Mantén el registro en una red controlada y limita los puertos a sus clientes y
+administradores. HTTPS y la autenticación de imágenes están integrados en el mismo
+contenedor. Protege el volumen persistente: contiene imágenes, la identidad de
+certificados, configuración y credenciales internas. El código de incorporación del
+grupo es secreto y sólo debe compartirse con sus administradores.
 
 La referencia de configuración está en
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
@@ -116,4 +133,3 @@ privados al solicitar ayuda.
 Código y documentación: [Apache License 2.0](LICENSE).
 Las licencias de los componentes incluidos se detallan en
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-

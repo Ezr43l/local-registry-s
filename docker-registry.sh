@@ -1,5 +1,5 @@
 #!/bin/sh
-# Configura los endpoints HTTP del registro para Docker.
+# Prepara certificados y credenciales HTTPS para Docker.
 #
 # REGISTRY_ENDPOINTS es una lista separada por comas de host:puerto. El script
 # se puede instalar en un hook de arranque o ejecutar manualmente. Si no se
@@ -11,7 +11,7 @@ CONFIG="${DOCKER_DAEMON_CONFIG:-/etc/docker/daemon.json}"
 ENDPOINTS="${REGISTRY_ENDPOINTS:-__REGISTRY_ENDPOINTS__}"
 
 if [ "$ENDPOINTS" = "__REGISTRY_ENDPOINTS__" ] || [ -z "$ENDPOINTS" ]; then
-  echo "[docker-registry] no hay endpoints HTTP configurados; no se modifica $CONFIG" >&2
+  echo "[docker-registry] no hay endpoints configurados; no se modifica $CONFIG" >&2
   exit 0
 fi
 
@@ -90,38 +90,19 @@ done
 IFS=$old_ifs
 json="${json%,}]"
 
-mkdir -p "$(dirname "$CONFIG")"
-tmp="${CONFIG}.tmp.$$"
-trap 'rm -f "$tmp"' EXIT INT TERM
-
-if [ -s "$CONFIG" ] && command -v jq >/dev/null 2>&1; then
-  jq --argjson registries "$json" '. + {"insecure-registries": $registries}' \
-    "$CONFIG" > "$tmp"
-elif [ -s "$CONFIG" ]; then
-  # En Unraid jq no siempre está instalado. No intentamos reescribir un JSON
-  # existente sin poder conservar sus otras claves, pero tampoco fallamos en
-  # cada arranque si ya contiene todos los endpoints que necesitamos.
-  missing=0
-  old_ifs=$IFS
-  IFS=,
-  for endpoint in $ENDPOINTS; do
-    endpoint=$(printf '%s' "$endpoint" | sed 's/^ *//;s/ *$//')
-    if ! grep -Fq "\"$endpoint\"" "$CONFIG"; then
-      missing=1
-      break
-    fi
-  done
-  IFS=$old_ifs
-  if [ "$missing" -eq 0 ]; then
-    echo "[docker-registry] $CONFIG ya contiene los endpoints HTTP; no se modifica"
-    exit 0
-  fi
-  echo "[docker-registry] $CONFIG ya existe y jq no está disponible; no se sobrescribe" >&2
-  exit 1
-else
-  printf '{"insecure-registries":%s}\n' "$json" > "$tmp"
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+client_config="${REGISTRY_CLIENT_CONFIG:-}"
+if [ -z "$client_config" ] && [ -f "$script_dir/client-config-path" ]; then
+  IFS= read -r client_config < "$script_dir/client-config-path"
 fi
-
-mv "$tmp" "$CONFIG"
-trap - EXIT INT TERM
-echo "[docker-registry] endpoints HTTP configurados en $CONFIG"
+if [ -z "$client_config" ]; then
+  echo "[docker-registry] prepara primero el fichero privado con configure-docker-client.py; no se habilita HTTP" >&2
+  exit 0
+fi
+case "$client_config" in /*) ;; *) echo 'Ruta de cliente no válida' >&2; exit 2;; esac
+if [ -f "$client_config" ]; then
+  python3 "$script_dir/configure-docker-client.py" --config "$client_config" --watch &
+  exit 0
+fi
+# El volumen de datos puede montarse después de ejecutar /boot/config/go.
+python3 "$script_dir/configure-docker-client.py" --config "$client_config" --wait 300 --watch &

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { SecurityPanel } from './SecurityPanel'
 import {
   fetchSettings, saveSettings, saveSetup,
   type SetupMember, type SetupPayload,
@@ -186,7 +187,7 @@ export function SetupPanel({
 
         <section className="panel">
           <header className="panel-head"><h2>Nodos del clúster</h2></header>
-          <label>Nodos<textarea required rows={6} value={members} onChange={(event) => setMembers(event.target.value)} placeholder={'node-a | |\nnode-b | http://registry-b.example:5000 | http://registry-b.example:5001'} /></label>
+          <label>Nodos<textarea required rows={6} value={members} onChange={(event) => setMembers(event.target.value)} placeholder={'node-a | |\nnode-b | https://registry-b.example:5000 | https://registry-b.example:5001'} /></label>
           <p className="sub">Una línea por nodo: nombre | URL del registro | URL del panel. En la línea de este nodo, ambas URL pueden quedar vacías.</p>
           <label>Código de incorporación
             <div className="setup-secret-row">
@@ -195,14 +196,14 @@ export function SetupPanel({
               {editing && enrollment && <button type="button" onClick={() => void copy(enrollment)}>Copiar</button>}
             </div>
           </label>
-          <p className="sub">Los nodos del mismo clúster deben usar el mismo código. Sustituirlo incorpora este nodo a otro clúster.</p>
+          <p className="sub">Este código secreto incorpora la identidad y los certificados del grupo. Compártelo sólo con sus administradores. Al unirte, la cuenta del grupo sustituye la cuenta inicial de este nodo.</p>
         </section>
 
         <section className="panel">
           <header className="panel-head"><h2>Mantenimiento y retención</h2></header>
           <label className="check-row"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Activar las acciones de mantenimiento</label>
           <div className="setup-grid">
-            <label>Versiones por rama<input type="number" min="0" max="100000" value={keepLast} onChange={(event) => setKeepLast(Number(event.target.value))} /></label>
+            <label>Versiones por rama, incluida la actual<input type="number" min="0" max="100000" value={keepLast} onChange={(event) => setKeepLast(Number(event.target.value))} /><small>Para conservar cinco anteriores y la actual, indica 6.</small></label>
             <label>Hora diaria<input type="time" value={hour} onChange={(event) => setHour(event.target.value)} /></label>
             {editing ? <div className="setup-readonly">
               <span>Coordinador del clúster</span>
@@ -247,5 +248,6 @@ export function SetupPanel({
         </div>
       </form>
     }
+    {editing && !loading && <div className="setup-form"><SecurityPanel csrfToken={csrfToken} /></div>}
   </main>
 }

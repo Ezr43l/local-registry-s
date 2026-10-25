@@ -5,10 +5,10 @@ proceso de publicación automática y sus requisitos de tareas en GitHub.
 
 ## Versión actual
 
-- Versión: `v1.2.16`.
+- Versión: `v1.2.17`.
 - Desarrollo privado: `Ezr43l/local-registry`.
 - Distribución pública: `Ezr43l/local-registry-s`.
-- Imagen por versión: `ghcr.io/ezr43l/local-registry-s:v1.2.16`.
+- Imagen por versión: `ghcr.io/ezr43l/local-registry-s:v1.2.17`.
 - Canal de la plantilla: `ghcr.io/ezr43l/local-registry-s:stable`.
 
 ## Pasos para una modificación
@@ -29,8 +29,8 @@ proceso de publicación automática y sus requisitos de tareas en GitHub.
    una subida no debe iniciar ninguna tarea automática.
 8. Sincronizar los tres Gitea y comprobar que cada espejo apunta exactamente
    al mismo cambio que el repositorio privado de GitHub.
-9. Si hay una imagen nueva, probarla primero en Khonshu y, tras aprobación,
-   desplegar esa misma imagen en los tres servidores y comprobar lo afectado.
+9. Si hay una imagen nueva, probarla primero en el nodo de pruebas y, tras aprobación,
+   desplegar esa misma imagen en los servidores del grupo y comprobar lo afectado.
 
 GitHub es un destino pasivo: no construye, prueba, analiza ni prepara versiones.
 Sus tareas automáticas permanecen desactivadas. Las imágenes anteriores y sus

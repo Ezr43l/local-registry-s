@@ -13,14 +13,13 @@ storage:
   # Sin esto, la API de borrado responde 405 y NO hay forma de recuperar espacio:
   # ni borrando etiquetas ni recolectando basura. Viene desactivado de fabrica.
   #
-  # Activarlo no borra nada por si solo: permite DELETE en la API OCI. El panel
-  # solo lo usa tras autenticar su mantenimiento, pero cualquier cliente que ya
-  # tenga acceso al Registry tambien puede invocar esa API. Por ello el puerto
-  # debe permanecer en una red de confianza o tras autenticacion externa.
+  # El motor sólo escucha en loopback. El acceso público pasa por la puerta
+  # HTTPS del mismo contenedor, que exige credenciales y permisos por operación.
   delete:
     enabled: true
 http:
-  addr: :5000
+  addr: 127.0.0.1:5050
+  relativeurls: true
   headers:
     X-Content-Type-Options: [nosniff]
 health:

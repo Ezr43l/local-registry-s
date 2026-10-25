@@ -47,6 +47,13 @@ mkdir -p "$(dirname "$FLAG")"
 
 rm -f "$FLAG"
 
+# La identidad TLS y las credenciales de máquina persisten en el mismo volumen.
+# El motor interno nunca se publica: sólo la puerta HTTPS escucha en 5000.
+if ! python3 /app/security.py prepare; then
+  echo "[entrypoint] no se pudo preparar la identidad segura del registro" >&2
+  exit 64
+fi
+
 if [ "$STATS_ENABLED" = "1" ]; then
   if ! python3 /app/server.py --check-config; then
     echo "[entrypoint] la configuración del panel no es válida" >&2
@@ -75,6 +82,7 @@ vigilar_panel() {
 }
 
 STATS_PID=""
+GATEWAY_PID=""
 if [ "$STATS_ENABLED" = "1" ]; then
   vigilar_panel &
   STATS_PID=$!
@@ -88,6 +96,7 @@ REG_PID=""
 terminar() {
   SALIENDO=1
   [ -n "$STATS_PID" ] && kill "$STATS_PID" 2>/dev/null
+  [ -n "$GATEWAY_PID" ] && kill "$GATEWAY_PID" 2>/dev/null
   [ -n "$REG_PID" ] && kill "$REG_PID" 2>/dev/null
   [ -n "$REG_PID" ] && wait "$REG_PID" 2>/dev/null
   exit 0
@@ -95,11 +104,24 @@ terminar() {
 SALIENDO=0
 trap terminar TERM INT
 
+vigilar_puerta() {
+  PUERTA_PID=""
+  trap '[ -z "$PUERTA_PID" ] || kill "$PUERTA_PID" 2>/dev/null; exit 0' TERM INT
+  /bin/secure-registry &
+  PUERTA_PID=$!
+  wait "$PUERTA_PID"
+  echo "[entrypoint] la puerta segura ha terminado; se reinicia el contenedor" >&2
+  kill -TERM "$$"
+}
+vigilar_puerta &
+GATEWAY_PID=$!
+
 while true; do
   # Distribution interpreta cualquier REGISTRY_* como una sobreescritura de su
   # YAML. Estas tres variables pertenecen al panel/entrypoint, no al registro;
   # se eliminan sólo del proceso hijo para evitar avisos y ambigüedad.
   env -u REGISTRY_CONFIG -u REGISTRY_URL -u REGISTRY_DATA \
+    REGISTRY_HTTP_ADDR=127.0.0.1:5050 \
     registry serve "$REGISTRY_CONFIG" &
   REG_PID=$!
   wait "$REG_PID"

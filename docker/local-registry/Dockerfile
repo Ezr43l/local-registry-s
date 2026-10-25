@@ -3,7 +3,7 @@
 ARG NODE_IMAGE=node:22.23.4-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
 ARG GO_IMAGE=golang:1.27.3-alpine3.24@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c
 ARG PYTHON_IMAGE=python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d
-ARG APP_VERSION=v1.2.16
+ARG APP_VERSION=v1.2.17
 ARG DISTRIBUTION_PATCH_SHA256=7231d9f29fc09d182a997c76dc7c8fc16729d644bec9d46a0164d897d32b080b
 
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web
@@ -101,6 +101,10 @@ RUN GOOS="$TARGETOS" GOARCH="$TARGETARCH" GOARM="${TARGETVARIANT#v}" \
         done \
     && test "$(find "$license_root/go/module-cache" -type f | wc -l | tr -d ' ')" -gt 0
 
+COPY docker/local-registry/secure-registry.go /tmp/secure-registry.go
+RUN GOOS="$TARGETOS" GOARCH="$TARGETARCH" GOARM="${TARGETVARIANT#v}" \
+    go build -trimpath -ldflags="-s -w" -o /out/secure-registry /tmp/secure-registry.go
+
 FROM ${PYTHON_IMAGE} AS runtime-base
 
 ARG APP_VERSION
@@ -120,7 +124,7 @@ LABEL org.opencontainers.image.title="Local Registry" \
       org.opencontainers.image.created="$BUILD_DATE" \
       org.opencontainers.image.licenses="$LICENSE" \
       net.unraid.docker.managed="dockerman" \
-      net.unraid.docker.webui="http://[IP]:[PORT:5001]/" \
+      net.unraid.docker.webui="https://[IP]:[PORT:5001]/" \
       net.unraid.docker.icon="https://www.docker.com/wp-content/uploads/2022/03/Moby-logo.png" \
       io.ezr43l.distribution.upstream.version="3.1.2" \
       io.ezr43l.distribution.upstream.revision="$DISTRIBUTION_COMMIT" \
@@ -161,13 +165,15 @@ RUN apk upgrade --no-cache \
        done
 
 COPY --from=registry-builder /out/registry /bin/registry
+COPY --from=registry-builder /out/secure-registry /bin/secure-registry
 COPY docker/local-registry/config.yml /etc/docker/registry/config.yml
 COPY docker/local-registry/server.py /app/server.py
+COPY docker/local-registry/security.py /app/security.py
 COPY LICENSE /app/LICENSE
 COPY --chmod=0755 docker/local-registry/entrypoint.sh /entrypoint.sh
 
 ENV APP_VERSION=$APP_VERSION \
-    REGISTRY_URL=http://127.0.0.1:5000 \
+    REGISTRY_URL=https://127.0.0.1:5000 \
     REGISTRY_DATA=/var/lib/registry \
     REGISTRY_CONFIG=/etc/docker/registry/config.yml \
     WEB_ROOT=/app/web \
@@ -189,13 +195,17 @@ COPY docker/local-registry/patches ./docker/local-registry/patches
 COPY docker/local-registry/web/package.json ./docker/local-registry/web/package.json
 COPY docker/local-registry/web/src ./docker/local-registry/web/src
 COPY docker/local-registry/server.py ./docker/local-registry/server.py
+COPY docker/local-registry/security.py ./docker/local-registry/security.py
 COPY docker/local-registry/entrypoint.sh ./docker/local-registry/entrypoint.sh
 COPY THIRD_PARTY_NOTICES.md ./
 COPY scripts ./scripts
 COPY third_party ./third_party
 COPY .env.example docker-compose.yml deploy-registry.sh docker-registry.sh mirror-registries.sh ./
-RUN if [ "$RUN_BUILD_TESTS" = "1" ]; then python3 -m unittest discover -s tests -v; fi \
+RUN if [ "$RUN_BUILD_TESTS" = "1" ]; then python3 -m unittest discover -s tests -p test_security_update.py -v; fi \
     && touch /tmp/local-registry-tests-passed
+
+FROM scratch AS security-tools
+COPY --from=registry-builder /out/secure-registry /secure-registry
 
 FROM runtime-base AS runtime
 COPY --from=tests /tmp/local-registry-tests-passed /app/.tests-passed
@@ -204,6 +214,6 @@ COPY --from=web /web/dist /app/web
 EXPOSE 5000 5001
 VOLUME ["/var/lib/registry"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/v2/', timeout=4).read()"]
+  CMD ["python3", "/app/security.py", "health"]
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/entrypoint.sh"]

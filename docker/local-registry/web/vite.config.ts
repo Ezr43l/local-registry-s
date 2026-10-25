@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react'
 //
 // El proxy solo actúa en `npm run dev`, para poder trabajar en la interfaz desde
 // el PC apuntando a un nodo de verdad:
-//   VITE_API=http://127.0.0.1:5001 npm run dev
+//   NODE_EXTRA_CA_CERTS=/ruta/ca.crt VITE_API=https://127.0.0.1:5001 npm run dev
 export default defineConfig({
   base: './',
   plugins: [react()],
@@ -14,7 +14,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: process.env.VITE_API || 'http://127.0.0.1:5001',
+        target: process.env.VITE_API || 'https://127.0.0.1:5001',
         changeOrigin: true,
       },
     },

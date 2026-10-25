@@ -44,6 +44,7 @@ export async function createOwner(payload: {
   display_name: string
   password: string
   password_confirmation: string
+  bootstrap_code: string
 }): Promise<AuthStatus> {
   return authRequest('api/auth/setup', payload)
 }
@@ -52,11 +53,35 @@ export async function login(username: string, password: string): Promise<AuthSta
   return authRequest('api/auth/session', { username, password })
 }
 
-export async function logout(): Promise<void> {
+export async function logout(csrfToken: string): Promise<void> {
   const response = await fetch('api/auth/session', {
-    method: 'DELETE', credentials: 'same-origin',
+    method: 'DELETE', credentials: 'same-origin', headers: { 'X-CSRF-Token': csrfToken },
   })
   if (!response.ok) throw new Error(`El servicio respondió ${response.status}`)
+}
+
+export interface RegistryClient {
+  id: string; name: string; username: string; permissions: string[]; repositories: string[]
+}
+export interface SecuritySettings {
+  tls_names: string[]; allowed_networks: string[]; ca_fingerprint: string; generation: number
+  clients: RegistryClient[]
+}
+export async function fetchSecurity(): Promise<SecuritySettings> {
+  const response = await fetch('api/security', { cache: 'no-store', credentials: 'same-origin' })
+  const body = await response.json()
+  if (!response.ok) throw new Error(body.error || 'No se pudo leer la seguridad')
+  return body
+}
+export async function updateSecurity(path: 'api/security' | 'api/security/clients', payload: Record<string, unknown>, csrfToken: string): Promise<{
+  ok: boolean; restarting?: boolean; username?: string; token?: string; replication_errors?: string[]
+}> {
+  const response = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: {
+    'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken,
+  }, body: JSON.stringify(payload) })
+  const body = await response.json()
+  if (!response.ok || !body.ok) throw new Error(body.error || 'No se pudo guardar la seguridad')
+  return body
 }
 
 export interface SetupStatus { required: boolean; version: string }

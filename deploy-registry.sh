@@ -409,6 +409,12 @@ trap - EXIT HUP INT TERM
     echo "· guion de arranque colocado en $BOOT_DIR/$BOOT_SCRIPT"
   fi
 
+  if [[ $DRY == 0 ]]; then
+    if ! ssh_node "test -s '$BOOT_DIR/configure-docker-client.py'"; then
+      cat configure-docker-client.py | ssh_node "umask 077; cat > '$BOOT_DIR/configure-docker-client.py'" || { fallos=1; continue; }
+    fi
+  fi
+
   # ── 2. el enganche en /boot/config/go ──────────────────────────────────────
   #
   # Va ANTES de /usr/local/sbin/emhttp y no al final: emhttp arranca el array y
@@ -809,8 +815,8 @@ if len(matches) == 1:
   for otro in "${NODES[@]}"; do
     IFS=: read -r oname oip _ <<< "$otro"
     [[ "$oname" == "$name" ]] && continue
-    pares="${pares:+$pares,}$oname=http://$oip:${NODE_REGISTRY_PORT[$oname]}"
-    paneles="${paneles:+$paneles,}$oname=http://$oip:${NODE_STATS_PORT[$oname]}"
+    pares="${pares:+$pares,}$oname=https://$oip:${NODE_REGISTRY_PORT[$oname]}"
+    paneles="${paneles:+$paneles,}$oname=https://$oip:${NODE_STATS_PORT[$oname]}"
   done
 
   template_values_match=1
@@ -972,11 +978,11 @@ test \"\$(docker inspect '$CONTAINER' --format '{{.HostConfig.ReadonlyRootfs}}|{
 test \"\$(docker inspect '$CONTAINER' --format '{{json .HostConfig.CapDrop}}')\" = '[\"ALL\"]'
 test \"\$(docker inspect '$CONTAINER' --format '{{json .HostConfig.SecurityOpt}}')\" = '[\"no-new-privileges\"]'
 test \"\$(docker inspect '$CONTAINER' --format '{{index .HostConfig.Tmpfs \"/run\"}}|{{index .HostConfig.Tmpfs \"/tmp\"}}')\" = 'rw,nosuid,noexec,size=16m,mode=0755|rw,nosuid,noexec,size=32m,mode=1777'
-curl -fsS --max-time 2 'http://127.0.0.1:$puerto_reg/v2/' >/dev/null
+docker exec '$CONTAINER' python3 /app/security.py health >/dev/null
 if [ '$stats_enabled' = 1 ]; then
-  curl -fsS --max-time 2 'http://127.0.0.1:$puerto_web/api/health' >/dev/null
+  docker exec '$CONTAINER' python3 /app/security.py panel-health >/dev/null
 else
-  ! curl -fsS --max-time 2 'http://127.0.0.1:$puerto_web/api/health' >/dev/null 2>&1
+  ! docker exec '$CONTAINER' python3 /app/security.py panel-health >/dev/null 2>&1
 fi
 echo secure
 " 2>/dev/null || true)"
@@ -1149,11 +1155,14 @@ docker run -d --name '$CONTAINER' \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
   --pids-limit=256 \
+  --memory=768m --cpus=2 \
+  --log-opt max-size=16m --log-opt max-file=3 \
   -p $puerto_reg:5000 \
   -p $puerto_web:5001 \
   -v '$data_dir:/var/lib/registry' \
   -v '$REMOTE_SECRETS_DIR:$SECRET_MOUNT:ro' \
   -e NODE_NAME='$name' \
+  -e LOCAL_REGISTRY_TLS_NAMES='$name,$ip' \
   -e PEERS='$pares' \
   -e PANEL_PEERS='$paneles' \
   -e APP_VERSION='$IMG_VER' \
@@ -1174,7 +1183,7 @@ docker run -d --name '$CONTAINER' \
   -e CORS_ALLOWED_ORIGINS='$cors_origins' \
   -e TZ='$tz' \
   --label net.unraid.docker.managed=dockerman \
-  --label 'net.unraid.docker.webui=http://[IP]:[PORT:5001]/' \
+  --label 'net.unraid.docker.webui=https://[IP]:[PORT:5001]/' \
   --label net.unraid.docker.icon=$ICON \
   '$IMAGE' >/dev/null
 
@@ -1182,15 +1191,15 @@ ready=0
 for attempt in \$(seq 1 30); do
   panel_ready=1
   if [ '$stats_enabled' = 1 ]; then
-    curl -fsS --max-time 2 'http://127.0.0.1:$puerto_web/api/health' >/dev/null 2>&1 \
+    docker exec '$CONTAINER' python3 /app/security.py panel-health >/dev/null 2>&1 \
       || panel_ready=0
   else
-    if curl -fsS --max-time 2 'http://127.0.0.1:$puerto_web/api/health' >/dev/null 2>&1; then
+    if docker exec '$CONTAINER' python3 /app/security.py panel-health >/dev/null 2>&1; then
       panel_ready=0
     fi
   fi
   if [ \"\$panel_ready\" = 1 ] \
-      && curl -fsS --max-time 2 'http://127.0.0.1:$puerto_reg/v2/' >/dev/null 2>&1; then
+      && docker exec '$CONTAINER' python3 /app/security.py health >/dev/null 2>&1; then
     ready=1
     break
   fi
@@ -1280,7 +1289,7 @@ rm -f \"\$secret_dir/.$ADMIN_SECRET_NAME.$DEPLOY_ID.new\" \
         continue
       fi
       [[ "$template_update" == "1" ]] && echo "· plantilla de Unraid activada atómicamente"
-      echo "· contenedor $CONTAINER desplegado → registro :$puerto_reg · panel http://$ip:$puerto_web/"
+      echo "· contenedor $CONTAINER desplegado → registro HTTPS :$puerto_reg · panel https://$ip:$puerto_web/"
     fi
   fi
 
@@ -1359,19 +1368,19 @@ for entry in "${NODES[@]}"; do
   pr="$(leer_puerto 5000)"; pr="${pr:-${NODE_REGISTRY_PORT[$name]}}"
   pw="$(leer_puerto 5001)"; pw="${pw:-${NODE_STATS_PORT[$name]}}"
 
-  if catalogo="$(curl -sf --max-time 8 "http://$ip:$pr/v2/_catalog" 2>/dev/null)"; then
+  if catalogo="$(ssh -i "$SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$ip" "docker exec '$CONTAINER' python3 /app/security.py catalog" 2>/dev/null)"; then
     n="$(echo "$catalogo" | tr ',' '\n' | grep -c '"' || true)"
-    echo "✅ $name: registro en http://$ip:$pr/v2/_catalog ($n imágenes)"
+    echo "✅ $name: registro HTTPS autenticado en $ip:$pr ($n imágenes)"
   else
-    echo "❌ $name: el registro no contesta en http://$ip:$pr/v2/_catalog" >&2
+    echo "❌ $name: no se pudo consultar el registro autenticado en https://$ip:$pr" >&2
     fallos=1
   fi
   if [[ "${NODE_STATS_ENABLED[$name]:-1}" == "0" ]]; then
     echo "   panel desactivado explícitamente (STATS_ENABLED=0)"
-  elif curl -sf --max-time 8 "http://$ip:$pw/api/health" >/dev/null 2>&1; then
-    echo "   panel en http://$ip:$pw/"
+  elif ssh -i "$SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=yes "root@$ip" "docker exec '$CONTAINER' python3 /app/security.py panel-health" >/dev/null 2>&1; then
+    echo "   panel en https://$ip:$pw/"
   else
-    echo "❌ $name: STATS_ENABLED=1 pero el panel no contesta en http://$ip:$pw/" >&2
+    echo "❌ $name: STATS_ENABLED=1 pero el panel no contesta en https://$ip:$pw/" >&2
     fallos=1
   fi
 done

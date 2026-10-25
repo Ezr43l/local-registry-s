@@ -11,6 +11,7 @@ export function AuthPanel({
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
+  const [bootstrap, setBootstrap] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -25,6 +26,7 @@ export function AuthPanel({
             display_name: displayName.trim(),
             password,
             password_confirmation: confirmation,
+            bootstrap_code: bootstrap.trim(),
           })
         : await login(username.trim(), password)
       onAuthenticated(status)
@@ -82,6 +84,13 @@ export function AuthPanel({
               onChange={(event) => setUsername(event.target.value)}
             />
           </label>
+          {setupRequired && (
+            <label>
+              <span>Código inicial de la consola</span>
+              <input required type="password" autoComplete="off" value={bootstrap} onChange={(event) => setBootstrap(event.target.value)} />
+              <small>Obtén el código desde la consola de este contenedor: <code>cat /var/lib/registry/.local-registry/security/bootstrap-code</code>. Sólo se utiliza al crear la primera cuenta.</small>
+            </label>
+          )}
           {setupRequired && (
             <label>
               <span>Nombre visible</span>

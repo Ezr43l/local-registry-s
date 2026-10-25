@@ -4,12 +4,12 @@ services:
       context: .
       dockerfile: docker/local-registry/Dockerfile
       args:
-        APP_VERSION: ${APP_VERSION:-v1.2.16}
+        APP_VERSION: ${APP_VERSION:-v1.2.17}
         SOURCE_URL: ${SOURCE_URL:-https://github.com/Ezr43l/local-registry-s}
         BUILD_DATE: ${BUILD_DATE:-}
         VCS_REF: ${VCS_REF:-unknown}
         LICENSE: ${LICENSE_SPDX:-Apache-2.0}
-    image: ${REGISTRY_IMAGE:-local-registry:v1.2.16}
+    image: ${REGISTRY_IMAGE:-local-registry:v1.2.17}
     restart: unless-stopped
     init: true
     ports:
@@ -26,4 +26,11 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 256
+    mem_limit: 768m
+    cpus: 2.0
+    logging:
+      driver: json-file
+      options:
+        max-size: 16m
+        max-file: "3"
     stop_grace_period: 30s

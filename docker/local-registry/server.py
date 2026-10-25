@@ -33,6 +33,8 @@ import os
 import re
 import secrets
 import signal
+import socket
+import ssl
 import stat
 # Subprocess is restricted to fixed argv, no shell and an absolute executable.
 import subprocess  # nosec B404
@@ -48,6 +50,7 @@ from datetime import datetime, timedelta
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import security
 
 def _env_bool(name: str, default: bool) -> bool:
     value = os.environ.get(name)
@@ -167,8 +170,8 @@ def _validated_http_base(name: str, value: str, *, origin_only: bool = False) ->
         parsed_port = parsed.port
     except ValueError as error:
         raise RuntimeError(f"{name} contiene una URL inválida") from error
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise RuntimeError(f"{name} debe usar una URL HTTP o HTTPS absoluta")
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise RuntimeError(f"{name} debe usar una URL HTTPS absoluta con certificado verificado")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise RuntimeError(f"{name} no admite credenciales, query ni fragmento")
     if parsed_port is not None and not (1 <= parsed_port <= 65535):
@@ -302,11 +305,11 @@ SETUP_REQUIRED = not PERSISTED_CONFIG_LOADED and not LEGACY_CONFIGURATION
 
 
 REGISTRY_URL = _validated_http_base(
-    "REGISTRY_URL", os.environ.get("REGISTRY_URL", "http://127.0.0.1:5000")
+    "REGISTRY_URL", os.environ.get("REGISTRY_URL", "https://127.0.0.1:5000")
 )
 REGISTRY_DATA = Path(os.environ.get("REGISTRY_DATA", "/var/lib/registry"))
 NODE_NAME = _validated_node_name("NODE_NAME", os.environ.get("NODE_NAME", "local"))
-APP_VERSION = os.environ.get("APP_VERSION", "v1.2.16").strip() or "v1.2.16"
+APP_VERSION = os.environ.get("APP_VERSION", "v1.2.17").strip() or "v1.2.17"
 PORT = _env_int("PORT", 5001, 1, 65535)
 CACHE_TTL = _env_int("CACHE_TTL", 300, 0, 86400)
 WEB_ROOT = Path(os.environ.get("WEB_ROOT", "/app/web"))
@@ -361,7 +364,7 @@ def _urlopen_http(request: str | urllib.request.Request, **kwargs):
         raise ValueError("la URL del registro debe usar HTTP o HTTPS")
     if parsed.username or parsed.password or parsed.fragment:
         raise ValueError("la URL del registro no admite credenciales ni fragmentos")
-    return urllib.request.urlopen(request, **kwargs)  # nosec B310
+    return security.open_http(request, {REGISTRY_URL, *PEERS.values()}, set(PANEL_PEERS.values()), **kwargs)
 
 
 # ─────────────────────────── utilidades de red ───────────────────────────────
@@ -375,7 +378,14 @@ def _fetch(url: str, method: str = "GET", timeout: int = 15):
             headers = dict(r.headers)
             if method == "HEAD":
                 return None, headers
-            return json.loads(r.read() or b"null"), headers
+            raw = r.read()
+            path = urllib.parse.unquote(urllib.parse.urlsplit(url).path)
+            if "/manifests/" in path or "/blobs/sha256:" in path:
+                ref = urllib.parse.unquote(path.rsplit("/", 1)[-1])
+                expected = ref if DIGEST_RE.fullmatch(ref) else _header(headers, "Docker-Content-Digest")
+                if not DIGEST_RE.fullmatch(expected) or expected != "sha256:" + hashlib.sha256(raw).hexdigest():
+                    raise ValueError("contenido del registro con hash incorrecto")
+            return json.loads(raw or b"null"), headers
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError, OSError):
         return None, None
 
@@ -393,6 +403,8 @@ def _paginado(base: str, ruta: str, clave: str) -> list[str]:
     url = f"{base}{ruta}"
     visto: set[str] = set()
     while url and url not in visto:
+        if len(visto) >= 1024 or security.origin(url) != security.origin(base):
+            raise ValueError("paginación fuera del origen o demasiado larga")
         visto.add(url)
         body, headers = _fetch(url)
         if body is None:
@@ -421,7 +433,7 @@ def manifest_of(base: str, repo: str, tag: str, vistos: set[str] | None = None):
     if vistos is None:
         vistos = set()
     ref_key = f"{repo}:{tag}"
-    if ref_key in vistos:
+    if ref_key in vistos or len(vistos) >= 256:
         return None, []
     vistos.add(ref_key)
     body, headers = _fetch(_ref_url(base, repo, tag))
@@ -816,8 +828,12 @@ def _decode_enrollment(code: str) -> str:
         raise RuntimeError("el código de incorporación no es válido") from error
     if not isinstance(document, dict):
         raise RuntimeError("el código de incorporación no pertenece a Local Registry")
-    if document.get("schema") == 2 and set(document) == {"schema", "cluster"}:
-        return _validated_secret("token de clúster", str(document.get("cluster") or ""))
+    if document.get("schema") == 3 and set(document) == {"schema", "cluster", "security"}:
+        cluster = _validated_secret("token de clúster", str(document.get("cluster") or ""))
+        security.import_enrollment(document["security"])
+        return cluster
+    if document.get("schema") in {1, 2}:
+        raise RuntimeError("genera un código nuevo: el anterior no incluye los certificados seguros del clúster")
     if document.get("schema") != 1 or set(document) != {"schema", "admin", "cluster"}:
         raise RuntimeError("el código de incorporación usa otro esquema")
     # Compatibilidad de incorporación con códigos generados antes del portal.
@@ -827,7 +843,7 @@ def _decode_enrollment(code: str) -> str:
 
 
 def _encode_enrollment(cluster: str) -> str:
-    raw = json.dumps({"schema": 2, "cluster": cluster},
+    raw = json.dumps({"schema": 3, "cluster": cluster, "security": security.export_enrollment()},
                      separators=(",", ":")).encode()
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
@@ -855,6 +871,7 @@ AUTH_SESSION_SECONDS = 12 * 60 * 60
 AUTH_USERNAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._@+-]{2,63}")
 _auth_lock = threading.RLock()
 _auth_attempts: dict[str, list[float]] = {}
+_password_capacity = threading.BoundedSemaphore(2)
 
 
 class AuthError(RuntimeError):
@@ -1039,7 +1056,7 @@ def _cluster_auth_snapshot() -> dict:
     }
 
 
-def _install_shared_auth(document, fingerprint: str) -> bool:
+def _install_shared_auth(document, fingerprint: str, replace_existing: bool = False) -> bool:
     shared = _validate_shared_auth(document)
     expected = _auth_fingerprint(shared)
     if not re.fullmatch(r"[0-9a-f]{64}", str(fingerprint or "")) or not hmac.compare_digest(
@@ -1050,11 +1067,12 @@ def _install_shared_auth(document, fingerprint: str) -> bool:
         if current:
             if not hmac.compare_digest(
                     _auth_fingerprint(_shared_auth_document(current)), expected):
-                raise AuthError(
-                    "Existe otra cuenta propietaria en este nodo; no se ha sobrescrito",
-                    409,
-                )
-            return False
+                if not replace_existing:
+                    raise AuthError(
+                        "Existe otra cuenta propietaria en este nodo; no se ha sobrescrito", 409,
+                    )
+            else:
+                return False
         local_document = {
             **shared,
             # Cada nodo firma sus propias cookies. Sólo la cuenta y su clave
@@ -1069,7 +1087,8 @@ def _install_shared_auth(document, fingerprint: str) -> bool:
 
 def _import_auth_from_cluster() -> dict:
     """Adopta la única identidad existente; nunca decide entre dos distintas."""
-    if _read_auth() or not PANEL_PEERS or len(MAINTENANCE_CLUSTER_TOKEN) < 32:
+    pending = (security.SECURITY_DIR / "pending-enrollment").exists()
+    if (_read_auth() and not pending) or not PANEL_PEERS or len(MAINTENANCE_CLUSTER_TOKEN) < 32:
         return {"imported": False, "conflict": False, "sources": []}
     candidates: dict[str, tuple[dict, list[str]]] = {}
     for name in sorted(PANEL_PEERS):
@@ -1097,7 +1116,12 @@ def _import_auth_from_cluster() -> dict:
     if not candidates:
         return {"imported": False, "conflict": False, "sources": []}
     fingerprint, (shared, sources) = next(iter(candidates.items()))
-    imported = _install_shared_auth(shared, fingerprint)
+    imported = _install_shared_auth(shared, fingerprint, replace_existing=pending)
+    credentials, error = _solicitud_panel(sources[0], "/api/internal/cluster/security", timeout=4)
+    if error or not credentials:
+        raise RuntimeError("no se pudieron importar las credenciales verificadas del grupo")
+    security.install_credentials(credentials)
+    (security.SECURITY_DIR / "pending-enrollment").unlink(missing_ok=True)
     return {"imported": imported, "conflict": False, "sources": sorted(sources)}
 
 
@@ -1120,6 +1144,7 @@ def _create_session(document: dict) -> tuple[str, dict]:
     signature = _urlsafe_encode(hmac.new(
         _urlsafe_decode(document["session_secret"]), encoded.encode("ascii"), hashlib.sha256,
     ).digest())
+    security.session_register(body["nonce"], public["expires_at"])
     return f"{encoded}.{signature}", public
 
 
@@ -1142,29 +1167,34 @@ def _read_session(token: str) -> dict | None:
         csrf = str(body["csrf"])
         expires_at = int(body["exp"])
         session_version = int(body["sv"])
+        nonce = str(body["nonce"])
     except (KeyError, TypeError, ValueError, UnicodeError, json.JSONDecodeError):
         return None
     if (
         expires_at <= int(time.time())
         or not hmac.compare_digest(username, document["username"])
         or session_version != document["session_version"]
+        or not security.session_valid(nonce, expires_at)
     ):
         return None
     return {
         "username": username, "display_name": display_name,
         "csrf_token": csrf, "expires_at": expires_at,
+        "nonce": nonce,
     }
 
 
 def _auth_status(token: str = "") -> dict:  # nosec B107: ausencia explícita de sesión
     document = _read_auth()
-    if not document:
+    if not document or (security.SECURITY_DIR / "pending-enrollment").exists():
         imported = _import_auth_from_cluster()
         if imported["conflict"]:
             raise RuntimeError(
                 "hay identidades propietarias distintas en el clúster; no se ha sobrescrito ninguna"
             )
         document = _read_auth()
+        if (security.SECURITY_DIR / "pending-enrollment").exists():
+            raise RuntimeError("incorporación pendiente: no responde la identidad verificada del grupo")
     if not document:
         return {"setup_required": True, "authenticated": False, "session": None}
     session = _read_session(token)
@@ -1177,8 +1207,10 @@ def _auth_status(token: str = "") -> dict:  # nosec B107: ausencia explícita de
 
 def _auth_setup(payload) -> tuple[str, dict]:
     if not isinstance(payload, dict) or set(payload) != {
-            "username", "display_name", "password", "password_confirmation"}:
+            "username", "display_name", "password", "password_confirmation", "bootstrap_code"}:
         raise AuthError("El formulario de acceso está incompleto")
+    if not security.bootstrap_valid(payload.get("bootstrap_code")):
+        raise AuthError("El código inicial de la consola no es válido", 403)
     username = _normalize_username(payload.get("username"))
     password = _validate_password(
         payload.get("password"), username, payload.get("password_confirmation"),
@@ -1197,6 +1229,8 @@ def _auth_setup(payload) -> tuple[str, dict]:
         _atomic_write(PERSISTED_AUTH, (
             json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         ).encode("utf-8"))
+        security.bootstrap_consumed()
+        security.audit("owner_created")
         return _create_session(document)
 
 
@@ -1210,24 +1244,38 @@ def _auth_login(payload, origin: str) -> tuple[str, dict]:
         username = _normalize_username(payload.get("username"))
     except AuthError:
         username = ""
-    key = f"{origin}|{username or '<invalid>'}"
     now = time.monotonic()
     with _auth_lock:
-        attempts = [instant for instant in _auth_attempts.get(key, []) if now - instant < 300]
-        if len(attempts) >= 5:
-            _auth_attempts[key] = attempts
+        for key in list(_auth_attempts):
+            active = [instant for instant in _auth_attempts[key] if now - instant < 300]
+            if active:
+                _auth_attempts[key] = active
+            else:
+                _auth_attempts.pop(key, None)
+        buckets = [("global", 60), (f"ip:{origin}", 10), (f"account:{username or '<invalid>'}", 10)]
+        if len(_auth_attempts) > 4096 or any(len(_auth_attempts.get(key, [])) >= limit for key, limit in buckets):
+            security.audit("login_limited", source=origin)
             raise AuthError("Demasiados intentos. Espera cinco minutos", 429)
+        for key, _ in buckets:
+            _auth_attempts.setdefault(key, []).append(now)
+    if not _password_capacity.acquire(blocking=False):
+        raise AuthError("El acceso está ocupado; inténtalo de nuevo en unos segundos", 429)
+    try:
+        password = str(payload.get("password") or "")
+        if len(password) > 128:
+            raise AuthError("Usuario o contraseña no válidos", 401)
         password_valid = _verify_password(
-            str(payload.get("password") or ""), document["password_hash"],
+            password, document["password_hash"],
         )
         valid = bool(username) and hmac.compare_digest(
             username, document["username"],
         ) and password_valid
         if not valid:
-            attempts.append(now)
-            _auth_attempts[key] = attempts
+            security.audit("login_denied", source=origin)
             raise AuthError("Usuario o contraseña no válidos", 401)
-        _auth_attempts.pop(key, None)
+    finally:
+        _password_capacity.release()
+    security.audit("login_accepted", source=origin)
     return _create_session(document)
 
 
@@ -1286,7 +1334,7 @@ def _validate_setup(payload) -> tuple[dict, str]:
     timezone = _setup_text(payload["timezone"], "zona horaria", 128, True)
     if timezone.startswith("/") or ".." in timezone or not Path("/usr/share/zoneinfo", timezone).is_file():
         raise RuntimeError("la zona horaria no existe en la imagen")
-    enrollment = _setup_text(payload["enrollment_code"], "código de incorporación", 4096)
+    enrollment = _setup_text(payload["enrollment_code"], "código de incorporación", 32768)
     cors_allowed_origins = _setup_origins(payload["cors_allowed_origins"])
     environment = {
         "NODE_NAME": node,
@@ -1316,6 +1364,7 @@ def _save_initial_setup(payload) -> dict:
     if enrollment:
         cluster = _decode_enrollment(enrollment)
         generated_code = ""
+        security.private_write(security.SECURITY_DIR / "pending-enrollment", b"1")
     else:
         cluster = secrets.token_urlsafe(48)
         generated_code = _encode_enrollment(cluster)
@@ -1325,6 +1374,7 @@ def _save_initial_setup(payload) -> dict:
     _atomic_write(PERSISTED_CONFIG, (
         json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     ).encode())
+    security.prepare(cluster)
     return {"ok": True, "restarting": True, "enrollment_code": generated_code}
 
 
@@ -1369,6 +1419,8 @@ def _save_settings(payload) -> dict:
     document, enrollment = _validate_setup(payload)
     if enrollment:
         cluster = _decode_enrollment(enrollment)
+        if cluster != MAINTENANCE_CLUSTER_TOKEN:
+            security.private_write(security.SECURITY_DIR / "pending-enrollment", b"1")
     elif len(MAINTENANCE_CLUSTER_TOKEN) >= 32:
         cluster = MAINTENANCE_CLUSTER_TOKEN
     else:
@@ -1379,6 +1431,7 @@ def _save_settings(payload) -> dict:
     _atomic_write(PERSISTED_CONFIG, (
         json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     ).encode())
+    security.prepare(cluster)
     return {"ok": True, "restarting": True}
 
 
@@ -1840,17 +1893,34 @@ def _solicitud_panel(
     req = urllib.request.Request(
         f"{base}{path}", method=method, data=body if method != "GET" else None,
     )
-    for clave, valor in _cabeceras_cluster(method, path, body).items():
+    request_headers = _cabeceras_cluster(method, path, body)
+    for clave, valor in request_headers.items():
         req.add_header(clave, valor)
+    def verified_response(response, status: int):
+        raw = response.read(security.MAX_REPLY + 1)
+        if len(raw) > security.MAX_REPLY:
+            raise ValueError("respuesta del nodo demasiado grande")
+        timestamp = _header(response.headers, "X-Registry-Cluster-Timestamp")
+        nonce = _header(response.headers, "X-Registry-Cluster-Nonce")
+        sender = _header(response.headers, "X-Registry-Cluster-Node")
+        signature = _header(response.headers, "X-Registry-Cluster-Signature")
+        if sender != nombre or nonce != request_headers["X-Registry-Cluster-Nonce"] or abs(int(timestamp) - int(time.time())) > CLUSTER_REQUEST_MAX_AGE:
+            raise ValueError("identidad o fecha de respuesta no válida")
+        expected = _firma_cluster(f"RESPONSE:{method.upper()}:{status}", path, timestamp, nonce, sender, raw)
+        if not hmac.compare_digest(signature, expected):
+            raise ValueError("respuesta del nodo sin firma válida")
+        data = json.loads(raw or b"{}")
+        if not isinstance(data, dict):
+            raise ValueError("respuesta del nodo inválida")
+        return data
     try:
         with _urlopen_http(req, timeout=timeout) as respuesta:
-            datos = json.loads(respuesta.read() or b"{}")
-            return datos if isinstance(datos, dict) else None, None
+            return verified_response(respuesta, respuesta.status), None
     except urllib.error.HTTPError as e:
         try:
-            detalle = json.loads(e.read() or b"{}").get("error")
-        except (ValueError, AttributeError):
-            detalle = None
+            detalle = verified_response(e, e.code).get("error")
+        except (ValueError, AttributeError, OSError):
+            return None, f"respuesta de error no verificada desde {nombre}"
         return None, detalle or f"HTTP {e.code} desde {nombre}"
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
         return None, f"{nombre} no responde ({type(e).__name__})"
@@ -2245,8 +2315,12 @@ def _manifiesto_crudo(base: str, repo: str, ref: str):
     req.add_header("Accept", ACCEPT)
     try:
         with _urlopen_http(req, timeout=30) as r:
-            return r.read(), _header(r.headers, "Content-Type"), \
-                   _header(r.headers, "Docker-Content-Digest")
+            raw = r.read()
+            digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+            announced = _header(r.headers, "Docker-Content-Digest")
+            if announced != digest or (DIGEST_RE.fullmatch(ref) and ref != digest):
+                raise ValueError("el manifiesto no coincide con su hash")
+            return raw, _header(r.headers, "Content-Type"), digest
     except Exception:
         return None, None, None
 
@@ -2263,8 +2337,9 @@ def _copiar_blob(origen: str, destino: str, repo: str, digest: str, size: int) -
             location = _header(r.headers, "Location")
         if not location:
             return False
-        if not location.startswith("http"):
-            location = destino + location
+        location = urllib.parse.urljoin(destino + "/", location)
+        if security.origin(location) != security.origin(destino):
+            return False
         url = location + ("&" if "?" in location else "?") + "digest=" + digest
 
         # El blob se reenvía en streaming: una capa puede pesar cientos de MB y
@@ -2282,10 +2357,20 @@ def _copiar_blob(origen: str, destino: str, repo: str, digest: str, size: int) -
         return False
 
 
-def _copiar_etiqueta(origen: str, destino: str, repo: str, tag: str) -> tuple[bool, str]:
-    crudo, ctype, _ = _manifiesto_crudo(origen, repo, tag)
+def _copiar_etiqueta(origen: str, destino: str, repo: str, tag: str, expected: str = "", visited: set[str] | None = None, depth: int = 0, budget: list[int] | None = None) -> tuple[bool, str]:
+    if visited is None:
+        visited = set()
+    if budget is None:
+        budget = [256]
+    budget[0] -= 1
+    if depth > 16 or tag in visited or budget[0] < 0:
+        return False, "índice cíclico o demasiado profundo"
+    visited.add(tag)
+    crudo, ctype, actual = _manifiesto_crudo(origen, repo, expected or tag)
     if not crudo:
         return False, "no se pudo leer el manifiesto en el origen"
+    if expected and actual != expected:
+        return False, "el manifiesto cambió durante la copia"
     try:
         doc = json.loads(crudo)
     except ValueError:
@@ -2295,8 +2380,13 @@ def _copiar_etiqueta(origen: str, destino: str, repo: str, tag: str) -> tuple[bo
     # destino tendría una etiqueta que apunta a capas que aún no están, y una
     # imagen rota es peor que una imagen ausente.
     piezas = []
+    if not isinstance(doc, dict) or len(doc.get("manifests") or []) > 128 or len(doc.get("layers") or []) > 1024:
+        return False, "manifiesto con estructura o tamaño no válido"
     for hijo in doc.get("manifests") or []:      # índice multiarquitectura
-        ok, msg = _copiar_etiqueta(origen, destino, repo, hijo.get("digest", ""))
+        child = hijo.get("digest", "")
+        if not DIGEST_RE.fullmatch(child):
+            return False, "hash de submanifiesto inválido"
+        ok, msg = _copiar_etiqueta(origen, destino, repo, child, child, set(visited), depth + 1, budget)
         if not ok:
             return False, f"submanifiesto: {msg}"
     cfg = doc.get("config") or {}
@@ -2306,6 +2396,8 @@ def _copiar_etiqueta(origen: str, destino: str, repo: str, tag: str) -> tuple[bo
         piezas.append((capa["digest"], int(capa.get("size") or 0)))
 
     for d, s in piezas:
+        if not DIGEST_RE.fullmatch(d) or not 0 <= s <= 20 * 1024**3:
+            return False, "hash o tamaño de blob inválido"
         if not _copiar_blob(origen, destino, repo, d, s):
             return False, f"fallo copiando blob {d[:19]}"
 
@@ -2315,7 +2407,10 @@ def _copiar_etiqueta(origen: str, destino: str, repo: str, tag: str) -> tuple[bo
         put.add_header("Content-Type", ctype or
                        "application/vnd.docker.distribution.manifest.v2+json")
         with _urlopen_http(put, timeout=120) as r:
-            return r.status in (200, 201, 202), ""
+            if r.status not in (200, 201, 202):
+                return False, "el destino rechazó el manifiesto"
+        check = _cabeza(_ref_url(destino, repo, tag))
+        return bool(check and _header(check, "Docker-Content-Digest") == actual), ""
     except Exception as e:
         return False, f"{type(e).__name__} al publicar el manifiesto"
 
@@ -2389,7 +2484,8 @@ def sincronizar(dry: bool) -> dict:
         copiadas, fallos = [], []
         if not dry:
             for destino, repo, tag, fuente in cambios:
-                ok, msg = _copiar_etiqueta(nodos[fuente], nodos[destino], repo, tag)
+                expected = inventarios[fuente][repo][tag]
+                ok, msg = _copiar_etiqueta(nodos[fuente], nodos[destino], repo, tag, expected)
                 if ok:
                     copiadas.append(f"{repo}:{tag} → {destino}")
                 else:
@@ -3147,13 +3243,79 @@ TIPOS = {
 }
 
 
+def _change_registry_client(payload: dict) -> dict:
+    config = _config_cluster()
+    if config["mode"] and not config["is_coordinator"]:
+        result, error = _solicitud_panel(config["coordinator"], "/api/internal/cluster/security/client", "POST", payload)
+        if error or result is None:
+            raise RuntimeError(error or "el coordinador no respondió")
+        return result
+    with _setup_lock:
+        result = security.change_client(payload)
+        snapshot = security.credential_snapshot()
+        errors = []
+        for name in sorted(PANEL_PEERS):
+            reply, error = _solicitud_panel(name, "/api/internal/cluster/security/install", "POST", snapshot)
+            if error or not reply or not reply.get("ok"):
+                errors.append(f"{name}: {error or 'credencial no confirmada'}")
+        result["replication_errors"] = errors
+        return result
+
+
+def _credential_sync_loop():
+    """Las revocaciones pendientes alcanzan al par cuando vuelve a estar disponible."""
+    while True:
+        try:
+            if _config_cluster()["is_coordinator"]:
+                snapshot = security.credential_snapshot()
+                for name in sorted(PANEL_PEERS):
+                    _, error = _solicitud_panel(name, "/api/internal/cluster/security/install", "POST", snapshot, timeout=5)
+                    if error:
+                        security.audit("credential_replication_pending", node=name)
+        except (OSError, ValueError, RuntimeError):
+            security.audit("credential_replication_pending")
+        time.sleep(30)
+
+
 class PanelHTTPServer(ThreadingHTTPServer):
-    """No convierte cierres normales del navegador en trazas de error."""
+    """TLS, conexiones acotadas y aislamiento del trabajo lento del panel."""
     daemon_threads = True
+
+    def __init__(self, *args, **kwargs):
+        self.capacity = threading.BoundedSemaphore(32)
+        self.tls = security.tls_context(server=True)
+        super().__init__(*args, **kwargs)
+
+    def verify_request(self, request, client_address):
+        allowed = security.allowed_address(client_address[0])
+        if not allowed:
+            security.audit("panel_network_denied", source=client_address[0])
+        return allowed
+
+    def process_request(self, request, client_address):
+        if not self.capacity.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.capacity.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            request.settimeout(3)
+            request = self.tls.wrap_socket(request, server_side=True)
+            request.settimeout(15)
+            super().process_request_thread(request, client_address)
+        except (OSError, ssl.SSLError):
+            self.shutdown_request(request)
+        finally:
+            self.capacity.release()
 
     def handle_error(self, request, client_address):
         error = sys.exc_info()[1]
-        if isinstance(error, (BrokenPipeError, ConnectionResetError)):
+        if isinstance(error, (BrokenPipeError, ConnectionResetError, TimeoutError, ssl.SSLError)):
             return
         super().handle_error(request, client_address)
 
@@ -3214,7 +3376,32 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
-        pass  # el registro de accesos no aporta nada aquí y ensucia los logs
+        # Nunca registrar requestline, cabeceras, cookies ni cuerpos de petición.
+        return None
+
+    def log_request(self, code="-", size="-"):
+        security.audit("panel_request", source=self.client_address[0], method=self.command,
+                       path=self.path.partition("?")[0][:256], status=code)
+
+    def handle_one_request(self):
+        self._verified_cluster_nonce = None
+        self._read_timer = threading.Timer(15, self._abort_read)
+        self._read_timer.daemon = True
+        self._read_timer.start()
+        try:
+            super().handle_one_request()
+        finally:
+            self._read_timer.cancel()
+
+    def _abort_read(self):
+        try:
+            self.connection.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
+    def _read_complete(self):
+        self._read_timer.cancel()
+        self.connection.settimeout(1800)
 
     def _responder(self, code: int, cuerpo: bytes, tipo: str, headers=None):
         self.send_response(code)
@@ -3238,6 +3425,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Vary", "Origin")
         for name, value in (headers or {}).items():
             self.send_header(name, value)
+        if self.path.startswith("/api/internal/cluster/") and self._verified_cluster_nonce:
+            timestamp = str(int(time.time()))
+            self.send_header("X-Registry-Cluster-Node", NODE_NAME)
+            self.send_header("X-Registry-Cluster-Timestamp", timestamp)
+            self.send_header("X-Registry-Cluster-Nonce", self._verified_cluster_nonce)
+            self.send_header("X-Registry-Cluster-Signature", _firma_cluster(
+                f"RESPONSE:{self.command}:{code}", self.path, timestamp,
+                self._verified_cluster_nonce, NODE_NAME, cuerpo,
+            ))
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(cuerpo)
@@ -3248,7 +3444,8 @@ class Handler(BaseHTTPRequestHandler):
         if "*" in CORS_ORIGINS or origin in CORS_ORIGINS:
             return True
         try:
-            return urllib.parse.urlsplit(origin).netloc == self.headers.get("Host", "")
+            parsed = urllib.parse.urlsplit(origin)
+            return parsed.scheme == "https" and parsed.netloc == self.headers.get("Host", "")
         except ValueError:
             return False
 
@@ -3290,7 +3487,7 @@ class Handler(BaseHTTPRequestHandler):
     @staticmethod
     def _cookie(token: str, max_age: int) -> str:
         return "; ".join([
-            f"{AUTH_COOKIE}={token}", "Path=/", "HttpOnly", "SameSite=Strict",
+            f"{AUTH_COOKIE}={token}", "Path=/", "HttpOnly", "SameSite=Strict", "Secure",
             f"Max-Age={max(0, max_age)}",
         ])
 
@@ -3304,18 +3501,15 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _cuerpo_json_interno(self, ruta: str) -> tuple[dict | None, str | None]:
-        try:
-            longitud = int(self.headers.get("Content-Length", "0") or 0)
-        except ValueError:
-            return None, "longitud de petición inválida"
-        if longitud < 0 or longitud > 65536:
-            return None, "petición demasiado grande"
-        cuerpo = self.rfile.read(longitud) if longitud else b""
+        cuerpo, error = self._cuerpo_publico()
+        if error or cuerpo is None:
+            return None, error
         autorizado, emisor = _peticion_cluster_autorizada(
             self.command, ruta, self.headers, cuerpo,
         )
         if not autorizado:
             return None, emisor
+        self._verified_cluster_nonce = _header(self.headers, "X-Registry-Cluster-Nonce")
         try:
             datos = json.loads(cuerpo or b"{}")
         except ValueError:
@@ -3332,15 +3526,24 @@ class Handler(BaseHTTPRequestHandler):
         de forma fiable un cuerpo desconocido y reutilizar el socket permitiría
         que esos bytes se interpretasen como la siguiente petición.
         """
+        lengths = self.headers.get_all("Content-Length", [])
+        if len(lengths) > 1 or self.headers.get("Transfer-Encoding"):
+            self.close_connection = True
+            return None, "encuadre HTTP no admitido"
         try:
-            longitud = int(self.headers.get("Content-Length", "0") or 0)
+            longitud = int(lengths[0] if lengths else "0")
         except ValueError:
             self.close_connection = True
             return None, "longitud de petición inválida"
         if longitud < 0 or longitud > 65536:
             self.close_connection = True
             return None, "petición demasiado grande"
-        return self.rfile.read(longitud) if longitud else b"", None
+        body = self.rfile.read(longitud) if longitud else b""
+        self._read_complete()
+        if len(body) != longitud:
+            self.close_connection = True
+            return None, "cuerpo de petición incompleto"
+        return body, None
 
     @staticmethod
     def _decodificar_json_publico(cuerpo: bytes) -> tuple[dict | None, str | None]:
@@ -3358,6 +3561,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": error or "petición no autorizada"}, 403)
         sender = datos.pop("_sender")
         config = _config_cluster()
+
+        if ruta == "/api/internal/cluster/security/install":
+            if sender != config["coordinator"]:
+                return self._json({"error": "sólo el coordinador distribuye credenciales"}, 403)
+            security.install_credentials(datos)
+            return self._json({"ok": True})
+
+        if ruta == "/api/internal/cluster/security/client":
+            if not config["is_coordinator"]:
+                return self._json({"error": "este nodo no es el coordinador"}, 409)
+            return self._json(_change_registry_client(datos))
 
         if ruta == "/api/internal/cluster/action":
             action = str(datos.get("action", ""))
@@ -3481,6 +3695,25 @@ class Handler(BaseHTTPRequestHandler):
                 return None
             except RuntimeError as e:
                 return self._json({"error": str(e)}, 409)
+        if ruta in {"/api/security", "/api/security/clients"}:
+            if not self._origin_permitido(origin):
+                return self._json({"error": "origen no permitido"}, 403)
+            if not self._require_session(mutation=True):
+                return None
+            datos, error = self._decodificar_json_publico(cuerpo)
+            if error or datos is None:
+                return self._json({"error": error or "petición inválida"}, 400)
+            try:
+                if ruta == "/api/security":
+                    result = security.save_settings(datos)
+                    self._json(result)
+                    timer = threading.Timer(0.5, os.kill, args=(os.getpid(), signal.SIGTERM))
+                    timer.daemon = True
+                    timer.start()
+                    return None
+                return self._json(_change_registry_client(datos))
+            except (ValueError, RuntimeError) as e:
+                return self._json({"error": str(e)}, 409)
         if (
             not self._origin_permitido(origin)
             or self.headers.get("X-Registry-Maintenance") != "1"
@@ -3519,6 +3752,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         ruta, _, consulta = self.path.partition("?")
+        if not ruta.startswith("/api/internal/cluster/"):
+            _, error = self._cuerpo_publico()
+            if error:
+                return self._json({"error": error}, 400)
         parametros = urllib.parse.parse_qs(consulta, keep_blank_values=True)
         refrescar = parametros.get("refresh") == ["1"]
 
@@ -3527,12 +3764,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(_auth_status(self._session_token()))
             if ruta == "/api/setup":
                 return self._json(_setup_status())
-            if ruta in {"/api/internal/cluster/status", "/api/internal/cluster/auth"}:
+            if ruta == "/api/security/ca":
+                return self._responder(200, security.private_read(security.SECURITY_DIR / "ca.pem"), "application/x-pem-file", {"Content-Disposition": 'attachment; filename="local-registry-ca.crt"'})
+            if ruta in {"/api/internal/cluster/status", "/api/internal/cluster/auth", "/api/internal/cluster/security"}:
                 datos, error = self._cuerpo_json_interno(ruta)
                 if error or datos is None:
                     return self._json({"error": error or "petición no autorizada"}, 403)
                 if ruta == "/api/internal/cluster/auth":
                     return self._json(_cluster_auth_snapshot())
+                if ruta == "/api/internal/cluster/security":
+                    return self._json(security.credential_snapshot())
                 return self._json({
                     "ok": True,
                     "node": NODE_NAME,
@@ -3574,6 +3815,9 @@ class Handler(BaseHTTPRequestHandler):
             if ruta == "/api/settings":
                 return self._json(_settings_payload())
 
+            if ruta == "/api/security":
+                return self._json(security.public_settings())
+
             if ruta == "/api/maintenance/retention":
                 # Consultar el plan no borra nada, así que puede ir por GET.
                 return self._json(plan_retencion())
@@ -3598,6 +3842,9 @@ class Handler(BaseHTTPRequestHandler):
         self._responder(200, destino.read_bytes(), tipo)
 
     def do_OPTIONS(self):
+        _, error = self._cuerpo_publico()
+        if error:
+            return self._json({"error": error}, 400)
         origin = self.headers.get("Origin", "").rstrip("/")
         if origin and not self._origin_permitido(origin):
             return self._json({"error": "origen no permitido"}, 403)
@@ -3614,12 +3861,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_DELETE(self):
+        _, error = self._cuerpo_publico()
+        if error:
+            return self._json({"error": error}, 400)
         ruta = self.path.split("?", 1)[0]
         origin = self.headers.get("Origin", "").rstrip("/")
         if ruta != "/api/auth/session":
             return self._json({"error": "no existe"}, 404)
         if not self._origin_permitido(origin):
             return self._json({"error": "origen no permitido"}, 403)
+        identity = self._require_session(mutation=True)
+        if not identity:
+            return None
+        security.session_revoke(identity["nonce"])
+        security.audit("logout", source=self.client_address[0])
         return self._json(
             {"authenticated": False, "session": None},
             headers={"Set-Cookie": self._cookie("", 0)},
@@ -3634,6 +3889,8 @@ if __name__ == "__main__" and sys.argv[1:] == ["--check-config"]:
 
 
 if __name__ == "__main__":
+    if PANEL_PEERS and MAINTENANCE_CLUSTER_TOKEN:
+        threading.Thread(target=_credential_sync_loop, daemon=True).start()
     prox = _proxima_ventana()
     config_cluster = _config_cluster()
     print(f"panel del registro · nodo={NODE_NAME} registro={REGISTRY_URL} "

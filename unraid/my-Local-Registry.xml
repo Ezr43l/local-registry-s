@@ -12,13 +12,13 @@
   <Privileged>false</Privileged>
   <Support>https://discord.gg/8MAT6ZGJTW</Support>
   <Project>https://github.com/Ezr43l/local-registry-s</Project>
-  <Overview>Registro OCI local con panel integrado, comparación entre nodos y mantenimiento coordinado. Tras el primer arranque, abre la WebUI para indicar nodos, retención y horario. Los secretos se generan dentro del volumen de almacenamiento y no se introducen en la plantilla.</Overview>
+  <Overview>Registro privado de imágenes con HTTPS, credenciales por aplicación y réplica coordinada. Tras el primer arranque, abre la WebUI; el código para crear la primera cuenta está en /var/lib/registry/.local-registry/security/bootstrap-code dentro del contenedor. Configura redes, certificados y accesos desde la app. Conserva el volumen al actualizar.</Overview>
   <Category>Tools:</Category>
-  <WebUI>http://[IP]:[PORT:5001]/</WebUI>
+  <WebUI>https://[IP]:[PORT:5001]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Ezr43l/local-registry-s/main/unraid/my-Local-Registry.xml</TemplateURL>
   <Icon>https://www.docker.com/wp-content/uploads/2022/03/Moby-logo.png</Icon>
-  <ExtraParams>--restart=unless-stopped --init --read-only --tmpfs /run:rw,nosuid,noexec,size=16m,mode=0755 --tmpfs /tmp:rw,nosuid,noexec,size=32m,mode=1777 --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=256</ExtraParams>
-  <Config Name="Puerto del registro" Target="5000" Default="5000" Mode="tcp" Description="Puerto para push y pull de imágenes." Type="Port" Display="always" Required="true" Mask="false">5000</Config>
-  <Config Name="Puerto del panel" Target="5001" Default="5001" Mode="tcp" Description="Puerto del panel y su API." Type="Port" Display="always" Required="true" Mask="false">5001</Config>
+  <ExtraParams>--restart=unless-stopped --init --read-only --tmpfs /run:rw,nosuid,noexec,size=16m,mode=0755 --tmpfs /tmp:rw,nosuid,noexec,size=32m,mode=1777 --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=256 --memory=768m --cpus=2 --log-opt max-size=16m --log-opt max-file=3</ExtraParams>
+  <Config Name="Puerto del registro" Target="5000" Default="5000" Mode="tcp" Description="HTTPS para descargar y publicar imágenes; exige credenciales propias de aplicación." Type="Port" Display="always" Required="true" Mask="false">5000</Config>
+  <Config Name="Puerto del panel" Target="5001" Default="5001" Mode="tcp" Description="HTTPS del panel y su API; configuración, certificados y permisos se administran desde aquí." Type="Port" Display="always" Required="true" Mask="false">5001</Config>
   <Config Name="Almacenamiento" Target="/var/lib/registry" Default="/mnt/user/appdata/local-registry" Mode="rw" Description="Imágenes, configuración del panel, secretos generados y estado. Conserva este directorio al actualizar." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/local-registry</Config>
 </Container>

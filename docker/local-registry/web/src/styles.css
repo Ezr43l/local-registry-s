@@ -2032,3 +2032,25 @@ button.peligro:hover:not(:disabled) {
   .setup-actions button { width: 100%; }
   .session-user { display: none; }
 }
+
+.security-actions, .security-client {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.security-client, .security-issued {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--hundido);
+}
+.security-client .sub { margin-bottom: 0; }
+.security-client button { flex-shrink: 0; }
+.security-fingerprint { overflow-wrap: anywhere; color: var(--tinta-suave); }
+.security-fingerprint code { font: 11px/1.6 var(--mono); }
+.security-certificate { color: var(--acento); }
+.security-issued button + button { margin-left: 10px; }
+.setup-grid small, .login-form small { color: var(--tinta-suave); font-weight: 400; line-height: 1.6; }

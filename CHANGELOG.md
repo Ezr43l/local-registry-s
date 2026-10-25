@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.2.17 — 2026-10-25
+
+- HTTPS integrado para registro y panel; el motor interno queda limitado a loopback.
+- Credenciales independientes por aplicación, permisos de descarga/publicación/borrado
+  y restricción por repositorio. Distribución y revocación coordinadas entre nodos.
+- Redes autorizadas y direcciones de certificados editables desde Configuración.
+- Código local de un solo uso para la primera cuenta, cookies seguras y sesiones revocables.
+- Límite agregado de intentos de acceso, conexiones y tiempos de lectura acotados.
+- Respuestas de clúster firmadas, verificación de manifiestos y copia fijada por digest;
+  límites de respuestas, profundidad y redirecciones dentro del mismo origen.
+- Eventos de acceso y seguridad sin secretos; límites de recursos y rotación de registros.
+- Utilidad de migración de clientes Docker compatible con Python 3.9, con certificados,
+  credenciales privadas y filtrado opcional IPv4/IPv6 conservado al cambiar redes.
+
 ## v1.2.16
 
 - Actualizadas las bases de Python, Node.js y Go con las correcciones de seguridad
