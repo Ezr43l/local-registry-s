@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.18 — 2026-11-12
+
+- Actualización de seguridad de Python, Expat y paquetes del contenedor.
+- Correcciones oficiales de OpenSSL del 10 de noviembre, sobre la versión estable y verificadas por su huella.
+- Actualización de Go, autenticación JOSE, red, compresión y Node.js de construcción.
+
 ## v1.2.17 — 2026-10-25
 
 - HTTPS integrado para registro y panel; el motor interno queda limitado a loopback.

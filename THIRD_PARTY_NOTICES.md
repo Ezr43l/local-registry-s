@@ -75,3 +75,7 @@ un identificador SPDX. Los ficheros originales de cada módulo tienen prioridad
 para sus copyrights y atribuciones concretas.
 
 Este inventario es informativo y no altera los términos de ninguna licencia.
+
+## Correcciones de seguridad de las bibliotecas
+
+OpenSSL 3.5.9 incorpora los cinco parches oficiales publicados el 10 de noviembre de 2026. Los parches, sus huellas y la licencia Apache-2.0 se conservan en /usr/share/licenses/security-runtime dentro de la imagen. Expat 2.10.0 procede de Alpine y Python utiliza esa biblioteca del sistema.

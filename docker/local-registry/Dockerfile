@@ -1,10 +1,19 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_IMAGE=node:22.23.4-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
-ARG GO_IMAGE=golang:1.27.3-alpine3.24@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c
-ARG PYTHON_IMAGE=python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d
-ARG APP_VERSION=v1.2.17
+ARG NODE_IMAGE=node:22.23.5-alpine3.24@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a
+ARG GO_IMAGE=golang:1.27.4-alpine3.24@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf
+ARG PYTHON_IMAGE=python:3.12.16-alpine3.24@sha256:c5ba3deef00c7758561a0f03c26f44f10589263d40e732b8748e0d1f38f6dd89
+ARG APP_VERSION=v1.2.18
 ARG DISTRIBUTION_PATCH_SHA256=7231d9f29fc09d182a997c76dc7c8fc16729d644bec9d46a0164d897d32b080b
+
+FROM ${PYTHON_IMAGE} AS security-builder
+COPY docker/security /security
+RUN sh /security/build-runtime.sh
+
+FROM ${PYTHON_IMAGE} AS security-python
+RUN apk upgrade --no-cache && apk add --no-cache libexpat=2.10.0-r0
+COPY --from=security-builder /out-runtime/ /
+RUN python3 -c 'import sys,pyexpat;assert sys.version_info[:3] == (3,12,16);assert pyexpat.version_info >= (2,10,0)'
 
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web
 WORKDIR /web
@@ -60,11 +69,12 @@ RUN apk add --no-cache ca-certificates git \
     && git -C /src diff --check \
     && rm -rf /src/vendor
 WORKDIR /src
-RUN go mod edit -go=1.27.3 \
+RUN go mod edit -go=1.27.4 \
     && go get \
-      github.com/klauspost/compress@v1.18.7 \
-      golang.org/x/crypto@v0.58.0 \
-      golang.org/x/net@v0.61.0 \
+      github.com/klauspost/compress@v1.20.2 \
+      github.com/go-jose/go-jose/v4@v4.1.9 \
+      golang.org/x/crypto@v0.59.0 \
+      golang.org/x/net@v0.62.0 \
       golang.org/x/text@v0.43.0 \
       google.golang.org/grpc@v1.84.0 \
       go.opentelemetry.io/otel/exporters/otlp/otlptrace@v1.45.0 \
@@ -72,9 +82,9 @@ RUN go mod edit -go=1.27.3 \
       go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@v1.45.0 \
     && go mod tidy \
     && ! go list -deps ./cmd/registry | grep -Eq '^golang.org/x/crypto/openpgp(/|$)' \
-    && test "$(go list -m -f '{{.Version}}' github.com/klauspost/compress)" = "v1.18.7" \
-    && test "$(go list -m -f '{{.Version}}' golang.org/x/crypto)" = "v0.58.0" \
-    && test "$(go list -m -f '{{.Version}}' golang.org/x/net)" = "v0.61.0" \
+    && test "$(go list -m -f '{{.Version}}' github.com/klauspost/compress)" = "v1.20.2" \
+    && test "$(go list -m -f '{{.Version}}' golang.org/x/crypto)" = "v0.59.0" \
+    && test "$(go list -m -f '{{.Version}}' golang.org/x/net)" = "v0.62.0" \
     && test "$(go list -m -f '{{.Version}}' golang.org/x/text)" = "v0.43.0" \
     && test "$(go list -m -f '{{.Version}}' google.golang.org/grpc)" = "v1.84.0" \
     && test "$(go list -m -f '{{.Version}}' go.opentelemetry.io/otel/exporters/otlp/otlptrace)" = "v1.45.0"
@@ -105,7 +115,7 @@ COPY docker/local-registry/secure-registry.go /tmp/secure-registry.go
 RUN GOOS="$TARGETOS" GOARCH="$TARGETARCH" GOARM="${TARGETVARIANT#v}" \
     go build -trimpath -ldflags="-s -w" -o /out/secure-registry /tmp/secure-registry.go
 
-FROM ${PYTHON_IMAGE} AS runtime-base
+FROM security-python AS runtime-base
 
 ARG APP_VERSION
 ARG BUILD_DATE=""
