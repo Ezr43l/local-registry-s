@@ -75,7 +75,7 @@ RUN go mod edit -go=1.27.4 \
       github.com/go-jose/go-jose/v4@v4.1.9 \
       golang.org/x/crypto@v0.59.0 \
       golang.org/x/net@v0.62.0 \
-      golang.org/x/text@v0.43.0 \
+      golang.org/x/text@v0.44.0 \
       google.golang.org/grpc@v1.84.0 \
       go.opentelemetry.io/otel/exporters/otlp/otlptrace@v1.45.0 \
       go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@v1.45.0 \
@@ -85,7 +85,7 @@ RUN go mod edit -go=1.27.4 \
     && test "$(go list -m -f '{{.Version}}' github.com/klauspost/compress)" = "v1.20.2" \
     && test "$(go list -m -f '{{.Version}}' golang.org/x/crypto)" = "v0.59.0" \
     && test "$(go list -m -f '{{.Version}}' golang.org/x/net)" = "v0.62.0" \
-    && test "$(go list -m -f '{{.Version}}' golang.org/x/text)" = "v0.43.0" \
+    && test "$(go list -m -f '{{.Version}}' golang.org/x/text)" = "v0.44.0" \
     && test "$(go list -m -f '{{.Version}}' google.golang.org/grpc)" = "v1.84.0" \
     && test "$(go list -m -f '{{.Version}}' go.opentelemetry.io/otel/exporters/otlp/otlptrace)" = "v1.45.0"
 RUN git tag --force v3.1.2 "$DISTRIBUTION_COMMIT" \
